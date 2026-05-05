@@ -39,18 +39,23 @@ function App() {
 
   return (
     <main className="app">
-      <h1>dku-writeme</h1>
+      <header className="app-header">
+        <h1>dku-writeme</h1>
+        <p>GitHub 저장소 URL을 입력하고 원하는 템플릿으로 README 초안을 생성해보세요.</p>
+      </header>
       <section className="placeholder-panel" aria-label="README generator workspace">
-        <UrlInput
-          url={url}
-          onChange={(event) => setUrl(event.target.value)}
-          onSubmit={handleSubmit}
-          loading={loading}
-        />
-        <TemplateSelector
-          template={template}
-          onChange={(event) => setTemplate(event.target.value)}
-        />
+        <section className="input-panel">
+          <UrlInput
+            url={url}
+            onChange={(event) => setUrl(event.target.value)}
+            onSubmit={handleSubmit}
+            loading={loading}
+          />
+          <TemplateSelector
+            template={template}
+            onChange={(event) => setTemplate(event.target.value)}
+          />
+        </section>
         <section className="markdown-workspace">
           <MarkdownEditor
             markdown={markdown}
