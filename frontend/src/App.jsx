@@ -4,46 +4,61 @@ import TemplateSelector from './components/TemplateSelector.jsx'
 import MarkdownEditor from './components/MarkdownEditor.jsx'
 import MarkdownPreview from './components/MarkdownPreview.jsx'
 import ActionButtons from './components/ActionButtons.jsx'
+import { requestReadme } from './api/repoApi.js'
 import { parseGithubUrl } from './utils/parseGithubUrl.js'
 import './App.css'
 
 function App() {
-  const [githubUrl, setGithubUrl] = useState('')
-  const [message, setMessage] = useState('')
+  const [url, setUrl] = useState('')
+  const [template, setTemplate] = useState('basic')
+  const [markdown, setMarkdown] = useState('')
+  const [loading, setLoading] = useState(false)
 
-  const handleSubmit = (event) => {
+  const handleSubmit = async (event) => {
     event.preventDefault()
 
+    if (!url.trim()) {
+      alert('GitHub 저장소 URL을 입력해주세요.')
+      return
+    }
+
+    setLoading(true)
+
     try {
-      const result = parseGithubUrl(githubUrl)
-      console.log(result)
-      setMessage(`${result.owner}/${result.repo}`)
+      const { owner, repo } = parseGithubUrl(url)
+      const response = await requestReadme(owner, repo, template)
+
+      setMarkdown(response.markdown)
+      console.log(response.markdown)
     } catch (error) {
-      console.error(error)
-      setMessage(error.message)
+      alert(error.message)
+    } finally {
+      setLoading(false)
     }
   }
 
   return (
     <main className="app">
       <h1>dku-writeme</h1>
-      <form className="url-form" onSubmit={handleSubmit}>
-        <input
-          type="text"
-          value={githubUrl}
-          onChange={(event) => setGithubUrl(event.target.value)}
-          placeholder="https://github.com/dku-writeme/dku-writeme"
-          aria-label="GitHub repository URL"
-        />
-        <button type="submit">확인</button>
-      </form>
-      {message && <p className="parse-result">{message}</p>}
       <section className="placeholder-panel" aria-label="README generator workspace">
-        <UrlInput />
-        <TemplateSelector />
-        <MarkdownEditor />
-        <MarkdownPreview />
-        <ActionButtons />
+        <UrlInput
+          url={url}
+          onChange={(event) => setUrl(event.target.value)}
+          onSubmit={handleSubmit}
+          loading={loading}
+        />
+        <TemplateSelector
+          template={template}
+          onChange={(event) => setTemplate(event.target.value)}
+        />
+        <section className="markdown-workspace">
+          <MarkdownEditor
+            markdown={markdown}
+            onChange={(event) => setMarkdown(event.target.value)}
+          />
+          <MarkdownPreview markdown={markdown} />
+        </section>
+        <ActionButtons markdown={markdown} />
       </section>
     </main>
   )

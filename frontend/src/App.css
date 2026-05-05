@@ -45,9 +45,32 @@
   cursor: pointer;
 }
 
-.parse-result {
-  margin: 0;
+.url-form button:disabled {
+  background: #9ca3af;
+  cursor: not-allowed;
+}
+
+.template-selector {
+  display: grid;
+  gap: 8px;
+  padding: 16px;
+  border: 1px solid #e5e7eb;
+  border-radius: 8px;
+  background: #ffffff;
+}
+
+.template-selector span {
+  font-size: 14px;
+  font-weight: 600;
   color: #4b5563;
+}
+
+.template-selector select {
+  padding: 12px 14px;
+  border: 1px solid #d1d5db;
+  border-radius: 8px;
+  background: #ffffff;
+  font: inherit;
 }
 
 .placeholder-panel {
@@ -61,4 +84,80 @@
   border: 1px solid #e5e7eb;
   border-radius: 8px;
   background: #ffffff;
+}
+
+.action-buttons {
+  display: flex;
+  justify-content: flex-end;
+  gap: 8px;
+}
+
+.action-buttons button {
+  padding: 12px 18px;
+  border: 1px solid #d1d5db;
+  border-radius: 8px;
+  color: #1f2937;
+  background: #ffffff;
+  font: inherit;
+  cursor: pointer;
+}
+
+.action-buttons button:hover {
+  background: #f3f4f6;
+}
+
+.markdown-workspace {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 12px;
+}
+
+.markdown-editor,
+.markdown-preview {
+  min-height: 360px;
+  box-sizing: border-box;
+  border: 1px solid #d1d5db;
+  border-radius: 8px;
+  background: #ffffff;
+}
+
+.markdown-editor textarea {
+  width: 100%;
+  height: 100%;
+  min-height: 360px;
+  box-sizing: border-box;
+  resize: vertical;
+  padding: 16px;
+  border: 0;
+  border-radius: 8px;
+  outline: none;
+  color: #111827;
+  background: transparent;
+  font: inherit;
+  line-height: 1.6;
+}
+
+.markdown-preview {
+  overflow: auto;
+  padding: 16px;
+  color: #111827;
+  line-height: 1.6;
+}
+
+.markdown-preview :first-child {
+  margin-top: 0;
+}
+
+.markdown-preview :last-child {
+  margin-bottom: 0;
+}
+
+.preview-empty {
+  color: #6b7280;
+}
+
+@media (max-width: 720px) {
+  .markdown-workspace {
+    grid-template-columns: 1fr;
+  }
 }
