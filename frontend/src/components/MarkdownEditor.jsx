@@ -1,6 +1,7 @@
 function MarkdownEditor({ markdown, onChange }) {
   return (
     <section className="markdown-editor">
+      <h2>Editor</h2>
       <textarea
         value={markdown}
         onChange={onChange}
