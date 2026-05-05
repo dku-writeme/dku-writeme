@@ -16,6 +16,40 @@
   font-weight: 700;
 }
 
+.url-form {
+  width: min(720px, 100%);
+  display: flex;
+  gap: 8px;
+}
+
+.url-form input {
+  flex: 1;
+  min-width: 0;
+  padding: 12px 14px;
+  border: 1px solid #d1d5db;
+  border-radius: 8px;
+  font: inherit;
+}
+
+.url-form input::placeholder {
+  color: #9ca3af;
+}
+
+.url-form button {
+  padding: 12px 18px;
+  border: 0;
+  border-radius: 8px;
+  color: #ffffff;
+  background: #2563eb;
+  font: inherit;
+  cursor: pointer;
+}
+
+.parse-result {
+  margin: 0;
+  color: #4b5563;
+}
+
 .placeholder-panel {
   width: min(720px, 100%);
   display: grid;
