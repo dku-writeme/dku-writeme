@@ -1,4 +1,6 @@
+// 완성된 README markdown을 복사하거나 README.md 파일로 다운로드하는 컴포넌트입니다.
 function ActionButtons({ markdown }) {
+  // Clipboard API를 사용해 현재 markdown 내용을 클립보드에 저장합니다.
   const handleCopy = async () => {
     if (!markdown) {
       alert('복사할 README 내용이 없습니다.')
@@ -13,6 +15,7 @@ function ActionButtons({ markdown }) {
     }
   }
 
+  // Blob URL을 임시로 만들어 브라우저 다운로드를 실행합니다.
   const handleDownload = () => {
     if (!markdown) {
       alert('다운로드할 README 내용이 없습니다.')
@@ -27,6 +30,7 @@ function ActionButtons({ markdown }) {
     link.download = 'README.md'
     link.click()
 
+    // 다운로드 트리거 후에는 임시 URL을 해제합니다.
     URL.revokeObjectURL(url)
   }
 
