@@ -66,24 +66,25 @@ ${repoInfo.description}
 
 export async function requestReadme(owner, repo, template = 'basic') {
   const selectedTemplate = TEMPLATE_BUILDERS[template] ? template : 'basic'
-  const repoInfo = {
-    name: repo,
-    fullName: `${owner}/${repo}`,
-    description: MOCK_REPO_DESCRIPTION,
-    stars: 12345,
-    forks: 678,
-    language: 'JavaScript',
-    url: `https://github.com/${owner}/${repo}`,
-    license: 'MIT',
+  try {
+    // POST방식으로 백엔드에게 요청 보내기
+    const response = await fetch('http://localhost:3000/api/generate', {
+      method: 'POST',
+      headers: {'Content-Type': 'application/json'},
+      body: JSON.stringify({owner,repo})
+    });
+   
+    if (!response.ok) throw new Error("서버 응답 에러");
+
+    // JSON으로 변경
+    const repoInfo = await response.json()
+    // TEMPLATE_BUILDERS의 템플릿대로 markdown생성
+    return {
+      markdown: TEMPLATE_BUILDERS[selectedTemplate](repoInfo),
+      repo: repoInfo
+    };
+  } catch(error) {
+    console.error("README 생성 오류: ", error);
+    throw error;
   }
-
-  // const response = await fetch(
-  //   `http://localhost:3000/api/readme?owner=${encodeURIComponent(owner)}&repo=${encodeURIComponent(repo)}&template=${encodeURIComponent(selectedTemplate)}`,
-  // )
-  // return response.json()
-
-  return Promise.resolve({
-    markdown: TEMPLATE_BUILDERS[selectedTemplate](repoInfo),
-    repo: repoInfo,
-  })
 }
