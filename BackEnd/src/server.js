@@ -1,5 +1,5 @@
 import http from 'node:http'
-import { deliverInfo } from './lib/deliverInfo.js'
+import { deliverFileTree, deliverInfo } from './lib/deliverInfo.js'
 
 // 서버가 실행될 주소와 포트를 환경변수로 변경할 수 있도록 구성함
 const HOST = process.env.HOST || '127.0.0.1'
@@ -83,8 +83,14 @@ async function handleGenerate(request, response) {
     return
   }
 
-  // 정상 조회된 저장소 정보를 프론트엔드에 반환
-  sendJson(response, 200, repoInfo)
+  // 기본 브랜치를 기준으로 저장소 파일 트리 조회
+  const files = await deliverFileTree(owner, repo, repoInfo.defaultBranch)
+
+  // 정상 조회된 저장소 정보와 파일 목록을 프론트엔드에 반환
+  sendJson(response, 200, {
+    ...repoInfo,
+    files,
+  })
 }
 
 const server = http.createServer(async (request, response) => {

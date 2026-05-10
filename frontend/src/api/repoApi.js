@@ -1,4 +1,22 @@
 // 백엔드에서 받아온 저장소 정보를 README markdown으로 변환하는 템플릿 모음
+// 토픽 목록이 비어있으면 README에 None으로 표시
+const formatTopics = (topics) => {
+  if (!topics || topics.length === 0) {
+    return 'None'
+  }
+
+  return topics.join(', ')
+}
+
+// GitHub API 날짜 문자열을 README에 보여줄 날짜 형식으로 변환
+const formatDate = (date) => {
+  if (!date) {
+    return 'None'
+  }
+
+  return new Date(date).toLocaleDateString()
+}
+
 const TEMPLATE_BUILDERS = {
   // 기본 정보, 설치, 사용법, 기능, 라이선스 섹션을 포함한 기본 템플릿 구성
   basic: (repoInfo) => `# ${repoInfo.name}
@@ -8,8 +26,12 @@ const TEMPLATE_BUILDERS = {
 - Full Name: ${repoInfo.fullName}
 - Description: ${repoInfo.description}
 - Language: ${repoInfo.language}
+- Default Branch: ${repoInfo.defaultBranch}
 - Stars: ${repoInfo.stars}
 - Forks: ${repoInfo.forks}
+- Open Issues: ${repoInfo.openIssues}
+- Topics: ${formatTopics(repoInfo.topics)}
+- Last Updated: ${formatDate(repoInfo.updatedAt)}
 
 ## Installation
 
@@ -42,6 +64,12 @@ ${repoInfo.description}
 
 - ${repoInfo.language}
 
+## Project Info
+
+- Default Branch: ${repoInfo.defaultBranch}
+- Topics: ${formatTopics(repoInfo.topics)}
+- Last Updated: ${formatDate(repoInfo.updatedAt)}
+
 ## Link
 
 ${repoInfo.url}
@@ -62,6 +90,10 @@ ${repoInfo.description}
 - Name: ${repoInfo.fullName}
 - URL: ${repoInfo.url}
 - Primary Language: ${repoInfo.language}
+- Default Branch: ${repoInfo.defaultBranch}
+- Open Issues: ${repoInfo.openIssues}
+- Created At: ${formatDate(repoInfo.createdAt)}
+- Last Updated: ${formatDate(repoInfo.updatedAt)}
 `,
 }
 
