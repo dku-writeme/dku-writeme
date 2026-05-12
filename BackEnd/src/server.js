@@ -1,5 +1,5 @@
 import http from 'node:http'
-import { deliverFileTree, deliverInfo } from './lib/deliverInfo.js'
+import { deliverFileContents, deliverFileTree, deliverInfo } from './lib/deliverInfo.js'
 import { selectImportantFiles } from './lib/selectImportantFiles.js'
 
 // 서버가 실행될 주소와 포트를 환경변수로 변경할 수 있도록 구성함
@@ -90,11 +90,20 @@ async function handleGenerate(request, response) {
   // 전체 파일 목록에서 README 생성에 필요한 핵심 파일만 선별함
   const selectedFiles = selectImportantFiles(files)
 
-  // 정상 조회된 저장소 정보, 전체 파일 목록, 핵심 파일 목록을 프론트엔드에 반환함
+  // 선별된 핵심 파일의 실제 내용을 조회함
+  const selectedFileContents = await deliverFileContents(
+    owner,
+    repo,
+    repoInfo.defaultBranch,
+    selectedFiles
+  )
+
+  // 정상 조회된 저장소 정보, 파일 목록, 핵심 파일 내용 목록을 프론트엔드에 반환함
   sendJson(response, 200, {
     ...repoInfo,
     files,
     selectedFiles,
+    selectedFileContents,
   })
 }
 
