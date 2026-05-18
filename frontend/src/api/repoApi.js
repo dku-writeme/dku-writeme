@@ -17,6 +17,55 @@ const formatDate = (date) => {
   return new Date(date).toLocaleDateString()
 }
 
+// README 생성에 활용할 핵심 파일 목록을 markdown 리스트 형태로 변환
+const formatImportantFiles = (readmeData) => {
+  // 백엔드에서 정리한 핵심 파일 목록이 없으면 None으로 표시
+  const files = readmeData?.importantFiles || []
+
+  if (files.length === 0) {
+    return '- None'
+  }
+
+  // README가 너무 길어지지 않도록 상위 핵심 파일만 보여줌
+  return files
+    .slice(0, 8)
+    .map((file) => `- \`${file.path}\` - ${file.reason}`)
+    .join('\n')
+}
+
+// package.json에서 추출한 실행 스크립트를 markdown 리스트 형태로 변환
+const formatScripts = (readmeData) => {
+  // 분석된 scripts 정보가 없으면 None으로 표시
+  const scripts = readmeData?.analysis?.scripts || {}
+  const scriptEntries = Object.entries(scripts)
+
+  if (scriptEntries.length === 0) {
+    return '- None'
+  }
+
+  // README에 보여줄 주요 실행 스크립트만 정리
+  return scriptEntries
+    .slice(0, 6)
+    .map(([name, command]) => `- \`${name}\`: \`${command}\``)
+    .join('\n')
+}
+
+// 전체 파일 트리에서 최상위 폴더 목록을 README 구조 섹션 형태로 변환
+const formatProjectStructure = (readmeData) => {
+  // 백엔드에서 정리한 최상위 폴더 목록이 없으면 None으로 표시
+  const directories = readmeData?.fileSummary?.topLevelDirectories || []
+
+  if (directories.length === 0) {
+    return '- None'
+  }
+
+  // 프로젝트 구조를 간단히 보여주기 위해 상위 폴더만 표시
+  return directories
+    .slice(0, 8)
+    .map((directory) => `- \`${directory}/\``)
+    .join('\n')
+}
+
 const TEMPLATE_BUILDERS = {
   // 기본 정보, 설치, 사용법, 기능, 라이선스 섹션을 포함한 기본 템플릿 구성
   basic: (repoInfo) => `# ${repoInfo.name}
@@ -49,7 +98,19 @@ npm run dev
 
 - GitHub repository summary
 - README template generation
-- Mock API response for frontend development
+- GitHub file analysis for README generation
+
+## Project Structure
+
+${formatProjectStructure(repoInfo.readmeData)}
+
+## Important Files
+
+${formatImportantFiles(repoInfo.readmeData)}
+
+## Available Scripts
+
+${formatScripts(repoInfo.readmeData)}
 
 ## License
 
@@ -69,6 +130,10 @@ ${repoInfo.description}
 - Default Branch: ${repoInfo.defaultBranch}
 - Topics: ${formatTopics(repoInfo.topics)}
 - Last Updated: ${formatDate(repoInfo.updatedAt)}
+
+## Important Files
+
+${formatImportantFiles(repoInfo.readmeData)}
 
 ## Link
 
@@ -94,6 +159,10 @@ ${repoInfo.description}
 - Open Issues: ${repoInfo.openIssues}
 - Created At: ${formatDate(repoInfo.createdAt)}
 - Last Updated: ${formatDate(repoInfo.updatedAt)}
+
+## Available Scripts
+
+${formatScripts(repoInfo.readmeData)}
 `,
 }
 
