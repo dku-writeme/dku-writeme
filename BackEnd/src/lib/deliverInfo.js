@@ -39,7 +39,8 @@ export async function deliverInfo(owner, repo) {
 
 export async function deliverFileTree(owner, repo, branch) {
     // 1. 기본 브랜치를 기준으로 레포지토리 전체 파일 트리 API 주소 생성
-    const apiUrl = `https://api.github.com/repos/${owner}/${repo}/git/trees/${branch}?recursive=1`
+    const encodedBranch = encodeURIComponent(branch)
+    const apiUrl = `https://api.github.com/repos/${owner}/${repo}/git/trees/${encodedBranch}?recursive=1`
 
     try {
         // 2. GitHub API로 파일/폴더 목록 요청

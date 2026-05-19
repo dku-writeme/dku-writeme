@@ -3,6 +3,8 @@
 // 파일명을 기준으로 중요한 파일과 선별 이유
 const IMPORTANT_FILE_REASONS = {
     'readme.md': '기존 README 파일',
+    'readme.txt': '기존 README 파일',
+    'readme.rst': '기존 README 파일',
     'package.json': 'Node.js 의존성 및 실행 스크립트 파일',
     'requirements.txt': 'Python 의존성 파일',
     'pyproject.toml': 'Python 프로젝트 설정 및 의존성 파일',
@@ -56,6 +58,13 @@ function isIgnoredPath(path) {
 function getImportantFileInfo(path) {
     // 파일명 기준으로 README 생성에 직접 필요한 설정 파일인지 확인함
     const filename = path.split('/').pop().toLowerCase()
+    if (filename === 'readme' || filename.startsWith('readme.')) {
+        return {
+            priority: 1,
+            reason: '기존 README 파일',
+        }
+    }
+
     if (IMPORTANT_FILE_REASONS[filename]) {
         return {
             priority: 1,

@@ -22,6 +22,12 @@ function findFileByName(fileContents, filename) {
   })
 }
 
+function isReadmeFile(file) {
+  // README, README.md, README.rst 등 README 계열 파일인지 확인
+  const filename = file.path.split('/').pop().toLowerCase()
+  return filename === 'readme' || filename.startsWith('readme.')
+}
+
 function parsePackageJson(fileContents) {
   // package.json 파일이 있으면 README에 사용할 실행 스크립트와 의존성을 추출
   const packageFile = findFileByName(fileContents, 'package.json')
@@ -59,7 +65,7 @@ function getContentPreview(content) {
 export function organizeReadmeData(repoInfo, files, selectedFiles, selectedFileContents) {
   // 핵심 파일 내용에서 package.json과 기존 README 여부를 먼저 분석
   const packageJson = parsePackageJson(selectedFileContents)
-  const existingReadme = findFileByName(selectedFileContents, 'readme.md')
+  const existingReadme = selectedFileContents.find(isReadmeFile)
 
   return {
     // README 상단 정보와 링크 영역에 사용할 저장소 기본 정보
