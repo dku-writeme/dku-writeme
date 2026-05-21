@@ -1,4 +1,11 @@
 // src/lib/deliverInfo
+function getGithubHeaders() {
+    const token = process.env.GITHUB_TOKEN
+    return {
+        'Accept': 'application/vnd.github+json',
+        ...(token && { 'Authorization': `Bearer ${token}` })
+    }
+}
 
 export async function deliverInfo(owner, repo) {
     // 1. Api주소 생성
@@ -6,7 +13,7 @@ export async function deliverInfo(owner, repo) {
     
     try {
         // 2. 데이터 요청
-        const response = await fetch(apiUrl)
+        const response = await fetch(apiUrl, { headers: getGithubHeaders() })
         if (!response.ok) {     // 응답코드 (200번대 이외=오류)일 경우, 에러발생
             throw new Error(`에러! status: ${response.status}`);
         }   
@@ -43,7 +50,7 @@ export async function deliverFileTree(owner, repo, branch) {
 
     try {
         // 2. GitHub API로 파일/폴더 목록 요청
-        const response = await fetch(apiUrl)
+        const response = await fetch(apiUrl, { headers: getGithubHeaders() })
         if (!response.ok) {     // 응답코드 (200번대 이외=오류)일 경우, 에러발생
             throw new Error(`에러! status: ${response.status}`);
         }
@@ -83,7 +90,7 @@ async function deliverSingleFileContent(owner, repo, branch, file) {
 
     try {
         // GitHub API로 단일 파일 내용을 요청함
-        const response = await fetch(apiUrl)
+        const response = await fetch(apiUrl, { headers: getGithubHeaders() })
         if (!response.ok) {     // 응답코드 (200번대 이외=오류)일 경우, 에러발생
             throw new Error(`에러! status: ${response.status}`);
         }

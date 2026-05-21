@@ -17,9 +17,48 @@ const formatDate = (date) => {
   return new Date(date).toLocaleDateString()
 }
 
+// selectedFileContents에서 package.json을 찾아 scripts 추출
+function extractScripts(selectedFileContents) {
+  if (!selectedFileContents || selectedFileContents.length === 0) {
+    return { install: 'npm install', dev: 'npm run dev' }
+  }
+
+  const packageJson = selectedFileContents.find(
+    (f) => f.path === 'package.json'
+  )
+
+  if (!packageJson) {
+    return { install: 'npm install', dev: 'npm run dev' }
+  }
+
+  try {
+    const parsed = JSON.parse(packageJson.content)
+    const scripts = parsed.scripts || {}
+
+    // 실행 명령어 우선순위: dev > start > serve
+    const devScript = scripts.dev
+      ? `npm run dev`
+      : scripts.start
+      ? `npm start`
+      : scripts.serve
+      ? `npm run serve`
+      : 'npm run dev'
+
+    return {
+      install: 'npm install',
+      dev: devScript
+    }
+  } catch {
+    return { install: 'npm install', dev: 'npm run dev' }
+  }
+}
+
 const TEMPLATE_BUILDERS = {
   // 기본 정보, 설치, 사용법, 기능, 라이선스 섹션을 포함한 기본 템플릿 구성
-  basic: (repoInfo) => `# ${repoInfo.name}
+  basic: (repoInfo) => {
+  const scripts = extractScripts(repoInfo.selectedFileContents)
+
+  return `# ${repoInfo.name}
 
 ## Repository Information
 
@@ -36,65 +75,24 @@ const TEMPLATE_BUILDERS = {
 ## Installation
 
 \`\`\`bash
-npm install
+${scripts.install}
 \`\`\`
 
 ## Usage
 
 \`\`\`bash
-npm run dev
+${scripts.dev}
 \`\`\`
 
 ## Features
 
-- GitHub repository summary
-- README template generation
-- Mock API response for frontend development
+${repoInfo.features || '- 기능 정보를 불러오는 중 오류가 발생했습니다.'}
 
 ## License
 
 This project is licensed under the ${repoInfo.license} License.
-`,
-  // 저장소 설명과 기술 스택, 링크만 간단히 보여주는 심플 템플릿 구성
-  simple: (repoInfo) => `# ${repoInfo.fullName}
-
-${repoInfo.description}
-
-## Tech Stack
-
-- ${repoInfo.language}
-
-## Project Info
-
-- Default Branch: ${repoInfo.defaultBranch}
-- Topics: ${formatTopics(repoInfo.topics)}
-- Last Updated: ${formatDate(repoInfo.updatedAt)}
-
-## Link
-
-${repoInfo.url}
-`,
-  // GitHub badge를 상단에 보여주는 뱃지 강조 템플릿 구성
-  badge: (repoInfo) => `# ${repoInfo.name}
-
-![GitHub stars](https://img.shields.io/github/stars/${repoInfo.fullName})
-![GitHub forks](https://img.shields.io/github/forks/${repoInfo.fullName})
-![GitHub license](https://img.shields.io/github/license/${repoInfo.fullName})
-
-## Overview
-
-${repoInfo.description}
-
-## Repository
-
-- Name: ${repoInfo.fullName}
-- URL: ${repoInfo.url}
-- Primary Language: ${repoInfo.language}
-- Default Branch: ${repoInfo.defaultBranch}
-- Open Issues: ${repoInfo.openIssues}
-- Created At: ${formatDate(repoInfo.createdAt)}
-- Last Updated: ${formatDate(repoInfo.updatedAt)}
-`,
+`
+},
 }
 
 // owner, repo, template 값을 기반으로 README markdown 생성 요청 처리

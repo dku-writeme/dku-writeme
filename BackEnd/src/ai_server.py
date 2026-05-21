@@ -1,0 +1,110 @@
+from fastapi import FastAPI
+from fastapi.middleware.cors import CORSMiddleware
+from pydantic import BaseModel
+from huggingface_hub import InferenceClient
+import json
+import re
+import os
+from dotenv import load_dotenv
+
+load_dotenv()
+HF_TOKEN = os.getenv("HF_TOKEN")
+
+app = FastAPI()
+
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=["*"],
+    allow_methods=["*"],
+    allow_headers=["*"],
+)
+
+client = InferenceClient(
+    model="Qwen/Qwen2.5-Coder-7B-Instruct",
+    token=HF_TOKEN
+)
+
+# 입력 데이터 형식 정의
+class AnalyzeRequest(BaseModel):
+    name: str
+    description: str | None = None
+    selectedFileContents: list
+
+def clean_response(text):
+    # 따옴표 제거
+    text = text.strip('"').strip("'")
+    # 환각 키워드 감지
+    hallucination_keywords = ["예측", "트렌드", "SMS", "email", "향후", "잠재적"]
+    for keyword in hallucination_keywords:
+        if keyword in text:
+            print(f"⚠️ 환각 감지: '{keyword}' 포함")
+    # 한자, 일본어, 러시아어 등 비한국어 문자 감지
+    non_korean = re.findall(r'[\u4e00-\u9fff\u3040-\u30ff\u0400-\u04ff]', text)
+    if non_korean:
+        print(f"⚠️ 비정상 문자 감지: {non_korean}")
+    return text
+
+def call_ai(prompt):
+    response = client.chat_completion(
+        messages=[
+            {
+                "role": "system",
+                "content": "당신은 코드 분석 전문가입니다. 반드시 한국어로만 작성하세요. 한자, 일본어, 중국어, 러시아어 사용 금지."
+            },
+            {
+                "role": "user",
+                "content": prompt
+            }
+        ],
+        max_tokens=500,
+    )
+    return clean_response(response.choices[0].message.content.strip())
+
+@app.post("/analyze")
+async def analyze(req: AnalyzeRequest):
+    context = json.dumps(req.model_dump(), indent=2, ensure_ascii=False)
+
+    # 질문 1. 프로젝트 설명 (description 없을 때만 AI 사용)
+    if not req.description or req.description in ("None", ""):
+        prompt_desc = f"""아래는 GitHub 저장소의 파일 목록과 내용입니다.
+
+        [데이터]
+        {context}
+
+        이 프로그램을 한 줄로 설명하시오.
+        - 마크다운 없이 순수 텍스트 한 문장으로만 출력
+        - 한국어만 사용"""
+        description = call_ai(prompt_desc)
+    else:
+        description = req.description
+
+    # 질문 2. 주요 기능 추출
+    prompt_features = f"""아래는 GitHub 저장소의 파일 목록과 내용입니다.
+
+    [데이터]
+    {context}
+
+    이 프로그램의 주요 기능을 2~5가지로 작성하시오.
+
+    [출력 규칙 - 반드시 준수]
+    - 형식: "- 기능명: 설명" 한 줄로만
+    - 설명은 20자 이내로 간결하게
+    - 파일명, 함수명, 변수명 언급 금지
+    - 사용자 관점에서 "무엇을 하는가"만 작성
+    - 한국어만 사용
+    - 코드에서 확인된 것만, 추측 금지
+    - 코드에 없는 기능은 절대 작성하지 말 것
+    - 확인되지 않은 기능은 목록에서 제외할 것
+
+    [좋은 예시]
+    - 주식 가격 수집: 지정한 종목의 실시간 주가를 가져옵니다.
+    - 조건 알림: 목표가 초과 시 자동으로 알림을 발송합니다.
+
+    [나쁜 예시 - 이렇게 하지 말 것]
+    - collector.py의 fetch_data 함수가 yfinance를 사용해서 주가 데이터를..."""
+    features = call_ai(prompt_features)
+
+    return {
+        "description": description,
+        "features": features
+    }
