@@ -17,6 +17,40 @@ const formatDate = (date) => {
   return new Date(date).toLocaleDateString()
 }
 
+// selectedFileContents에서 package.json을 찾아 scripts 추출
+function extractScripts(selectedFileContents) {
+  if (!selectedFileContents || selectedFileContents.length === 0) {
+    return { install: 'npm install', dev: 'npm run dev' }
+  }
+
+  const packageJson = selectedFileContents.find(
+    (f) => f.path === 'package.json'
+  )
+
+  if (!packageJson) {
+    return { install: 'npm install', dev: 'npm run dev' }
+  }
+
+  try {
+    const parsed = JSON.parse(packageJson.content)
+    const scripts = parsed.scripts || {}
+
+    // 실행 명령어 우선순위: dev > start > serve
+    const devScript = scripts.dev
+      ? `npm run dev`
+      : scripts.start
+      ? `npm start`
+      : scripts.serve
+      ? `npm run serve`
+      : 'npm run dev'
+
+    return {
+      install: 'npm install',
+      dev: devScript
+    }
+  } catch {
+    return { install: 'npm install', dev: 'npm run dev' }
+  }
 // README 생성에 활용할 핵심 파일 목록을 markdown 리스트 형태로 변환
 const formatImportantFiles = (readmeData) => {
   // 백엔드에서 정리한 핵심 파일 목록이 없으면 None으로 표시
@@ -68,7 +102,10 @@ const formatProjectStructure = (readmeData) => {
 
 const TEMPLATE_BUILDERS = {
   // 기본 정보, 설치, 사용법, 기능, 라이선스 섹션을 포함한 기본 템플릿 구성
-  basic: (repoInfo) => `# ${repoInfo.name}
+  basic: (repoInfo) => {
+  const scripts = extractScripts(repoInfo.selectedFileContents)
+
+  return `# ${repoInfo.name}
 
 ## Repository Information
 
@@ -85,17 +122,18 @@ const TEMPLATE_BUILDERS = {
 ## Installation
 
 \`\`\`bash
-npm install
+${scripts.install}
 \`\`\`
 
 ## Usage
 
 \`\`\`bash
-npm run dev
+${scripts.dev}
 \`\`\`
 
 ## Features
 
+${repoInfo.features || '- 기능 정보를 불러오는 중 오류가 발생했습니다.'}
 - GitHub repository summary
 - README template generation
 - GitHub file analysis for README generation

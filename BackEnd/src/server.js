@@ -2,6 +2,8 @@ import http from 'node:http'
 import { deliverFileContents, deliverFileTree, deliverInfo } from './lib/deliverInfo.js'
 import { organizeReadmeData } from './lib/organizeReadmeData.js'
 import { selectImportantFiles } from './lib/selectImportantFiles.js'
+import dotenv from 'dotenv'
+dotenv.config()
 
 // 서버가 실행될 주소와 포트를 환경변수로 변경할 수 있도록 구성
 const HOST = process.env.HOST || '127.0.0.1'
@@ -49,47 +51,70 @@ async function readJsonBody(request) {
   }
 }
 
-// README 생성을 위한 저장소 정보 조회 API 처리
 async function handleGenerate(request, response) {
   let payload
 
   try {
-    // 클라이언트가 보낸 owner, repo 값을 읽기 위해 요청 body 파싱
     payload = await readJsonBody(request)
   } catch (error) {
-    // JSON 파싱 실패 시 400 에러 처리
     sendJson(response, 400, { message: error.message })
     return
   }
 
-  // body 값이 없거나 다른 타입이어도 문자열로 맞춘 뒤 공백 제거
   const owner = String(payload.owner || '').trim()
   const repo = String(payload.repo || '').trim()
 
   if (!owner || !repo) {
-    // 필수 요청값 누락 시 400 에러 처리
     sendJson(response, 400, {
       message: 'owner와 repo를 모두 입력해주세요.',
     })
     return
   }
 
-  // GitHub API에서 저장소 기본 정보 조회
   const repoInfo = await deliverInfo(owner, repo)
 
   if (!repoInfo) {
-    // GitHub 저장소 조회 실패 시 404 에러 처리
     sendJson(response, 404, {
       message: 'GitHub 저장소 정보를 가져오지 못했습니다.',
     })
     return
   }
 
-  // 기본 브랜치를 기준으로 저장소 파일 트리 조회
   const files = await deliverFileTree(owner, repo, repoInfo.defaultBranch)
-
-  // 전체 파일 목록에서 README 생성에 필요한 핵심 파일만 선별
   const selectedFiles = selectImportantFiles(files)
+  const selectedFileContents = await deliverFileContents(
+    owner,
+    repo,
+    repoInfo.defaultBranch,
+    selectedFiles
+  )
+  
+  // AI 서버 호출
+  let description = repoInfo.description
+  let features = null
+
+  try {
+    const aiResponse = await fetch('http://localhost:8000/analyze', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        name: repoInfo.name,
+        description: repoInfo.description,
+        selectedFileContents: selectedFileContents.map(f => ({
+          path: f.path,
+          content: f.content
+        }))
+      })
+    })
+
+    if (aiResponse.ok) {
+      const aiResult = await aiResponse.json()
+      description = aiResult.description
+      features = aiResult.features
+    }
+  } catch (error) {
+    console.error('AI 서버 호출 실패:', error.message)
+  }
 
   // 선별된 핵심 파일의 실제 내용을 조회
   const selectedFileContents = await deliverFileContents(
@@ -105,6 +130,8 @@ async function handleGenerate(request, response) {
   // 정상 조회된 저장소 정보, 파일 목록, 핵심 파일 내용, README 생성용 데이터를 반환
   sendJson(response, 200, {
     ...repoInfo,
+    description,
+    features,
     files,
     selectedFiles,
     selectedFileContents,
