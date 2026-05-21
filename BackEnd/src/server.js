@@ -1,14 +1,15 @@
 import http from 'node:http'
 import { deliverFileContents, deliverFileTree, deliverInfo } from './lib/deliverInfo.js'
+import { organizeReadmeData } from './lib/organizeReadmeData.js'
 import { selectImportantFiles } from './lib/selectImportantFiles.js'
 import dotenv from 'dotenv'
 dotenv.config()
 
-// 서버가 실행될 주소와 포트를 환경변수로 변경할 수 있도록 구성함
+// 서버가 실행될 주소와 포트를 환경변수로 변경할 수 있도록 구성
 const HOST = process.env.HOST || '127.0.0.1'
 const PORT = process.env.PORT || 3000
 
-// 프론트엔드 개발 서버에서 API 호출할 수 있도록 CORS 헤더 구성함
+// 프론트엔드 개발 서버에서 API 호출할 수 있도록 CORS 헤더 구성
 const corsHeaders = {
   'Access-Control-Allow-Origin': '*',
   'Access-Control-Allow-Methods': 'GET, POST, OPTIONS',
@@ -42,7 +43,7 @@ async function readJsonBody(request) {
   }
 
   try {
-    // 문자열 body를 실제 JavaScript 객체로 파싱함
+    // 문자열 body를 실제 JavaScript 객체로 파싱
     return JSON.parse(body)
   } catch {
     // JSON 형식이 깨진 경우 호출한 쪽에서 400 응답을 보낼 수 있게 에러 발생
@@ -87,7 +88,7 @@ async function handleGenerate(request, response) {
     repoInfo.defaultBranch,
     selectedFiles
   )
-
+  
   // AI 서버 호출
   let description = repoInfo.description
   let features = null
@@ -115,6 +116,18 @@ async function handleGenerate(request, response) {
     console.error('AI 서버 호출 실패:', error.message)
   }
 
+  // 선별된 핵심 파일의 실제 내용을 조회
+  const selectedFileContents = await deliverFileContents(
+    owner,
+    repo,
+    repoInfo.defaultBranch,
+    selectedFiles
+  )
+
+  // README 생성에 바로 활용할 수 있도록 저장소 정보와 핵심 파일 분석 정보를 정리
+  const readmeData = organizeReadmeData(repoInfo, files, selectedFiles, selectedFileContents)
+
+  // 정상 조회된 저장소 정보, 파일 목록, 핵심 파일 내용, README 생성용 데이터를 반환
   sendJson(response, 200, {
     ...repoInfo,
     description,
@@ -122,11 +135,12 @@ async function handleGenerate(request, response) {
     files,
     selectedFiles,
     selectedFileContents,
+    readmeData,
   })
 }
 
 const server = http.createServer(async (request, response) => {
-  // 요청 URL을 파싱해 method와 pathname 기준으로 라우팅함
+  // 요청 URL을 파싱해 method와 pathname 기준으로 라우팅
   const url = new URL(request.url, `http://${request.headers.host}`)
 
   if (request.method === 'OPTIONS') {
