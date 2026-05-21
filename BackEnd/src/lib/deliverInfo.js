@@ -63,8 +63,8 @@ export async function deliverFileTree(owner, repo, branch) {
     }
 }
 
-const MAX_CONTENT_FILES = 10
-const MAX_CONTENT_SIZE = 100000
+const DEFAULT_MAX_CONTENT_FILES = 30
+const DEFAULT_MAX_CONTENT_SIZE = 100000
 
 function encodeFilePath(path) {
     // GitHub API 주소에서 사용할 수 있도록 파일 경로를 인코딩함
@@ -106,11 +106,16 @@ async function deliverSingleFileContent(owner, repo, branch, file) {
     }
 }
 
-export async function deliverFileContents(owner, repo, branch, selectedFiles = []) {
+export async function deliverFileContents(owner, repo, branch, selectedFiles = [], options = {}) {
+    const {
+        maxFiles = DEFAULT_MAX_CONTENT_FILES,
+        maxContentSize = DEFAULT_MAX_CONTENT_SIZE,
+    } = options
+
     // 선별된 파일 중 크기가 작은 상위 파일만 실제 내용 조회 대상으로 사용함
     const targetFiles = selectedFiles
-        .filter((file) => file.size <= MAX_CONTENT_SIZE)
-        .slice(0, MAX_CONTENT_FILES)
+        .filter((file) => file.size <= maxContentSize)
+        .slice(0, maxFiles)
 
     const fileContents = await Promise.all(
         targetFiles.map((file) => deliverSingleFileContent(owner, repo, branch, file))

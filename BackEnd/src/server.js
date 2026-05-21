@@ -96,7 +96,11 @@ async function handleGenerate(request, response) {
     owner,
     repo,
     repoInfo.defaultBranch,
-    selectedFiles
+    selectedFiles,
+    {
+      maxFiles: 30,
+      maxContentSize: 100000,
+    }
   )
 
   // README 생성에 바로 활용할 수 있도록 저장소 정보와 핵심 파일 분석 정보를 정리
