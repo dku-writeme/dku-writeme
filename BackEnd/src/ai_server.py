@@ -66,6 +66,7 @@ async def analyze(req: AnalyzeRequest):
 
     # 질문 1. 프로젝트 설명 (description 없을 때만 AI 사용)
     if not req.description or req.description in ("None", ""):
+        print("💡 [INFO] description이 없거나 비어 있습니다. ➡️ AI 분석을 호출합니다.")
         prompt_desc = f"""아래는 GitHub 저장소의 파일 목록과 내용입니다.
 
         [데이터]
@@ -76,6 +77,8 @@ async def analyze(req: AnalyzeRequest):
         - 한국어만 사용"""
         description = call_ai(prompt_desc)
     else:
+        print(f"✅ [INFO] 기존 description이 존재합니다. AI를 사용하지 않고 기존 데이터를 유지합니다.")
+        print(f"   (기존 내용: {req.description[:30]}...)")
         description = req.description
 
     # 질문 2. 주요 기능 추출
@@ -103,6 +106,14 @@ async def analyze(req: AnalyzeRequest):
     [나쁜 예시 - 이렇게 하지 말 것]
     - collector.py의 fetch_data 함수가 yfinance를 사용해서 주가 데이터를..."""
     features = call_ai(prompt_features)
+    
+    print("\n" + "="*40)
+    print("🚀 [AI SERVER] analyze 함수 반환 값 확인")
+    print("="*40)
+    print(f"📝 Description:\n{description}")
+    print("-"*40)
+    print(f"⚡ Features:\n{features}")
+    print("="*40 + "\n")
 
     return {
         "description": description,

@@ -116,14 +116,6 @@ async function handleGenerate(request, response) {
     console.error('AI 서버 호출 실패:', error.message)
   }
 
-  // 선별된 핵심 파일의 실제 내용을 조회
-  const selectedFileContents = await deliverFileContents(
-    owner,
-    repo,
-    repoInfo.defaultBranch,
-    selectedFiles
-  )
-
   // README 생성에 바로 활용할 수 있도록 저장소 정보와 핵심 파일 분석 정보를 정리
   const readmeData = organizeReadmeData(repoInfo, files, selectedFiles, selectedFileContents)
 
