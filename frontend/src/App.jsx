@@ -31,7 +31,6 @@ function App() {
       const response = await requestReadme(owner, repo, template)
 
       setMarkdown(response.markdown)
-      console.log(response.markdown)
     } catch (error) {
       alert(error.message)
     } finally {

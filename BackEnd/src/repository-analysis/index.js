@@ -1,60 +1,117 @@
-// index.js
+// repository-analysis/index.js
 import {
   buildReadmeModelInput,
   selectFiles,
   summarizeSelected,
-} from './src/repository-analysis/fileSelector.js';
-import { detectProject }                  from './src/repository-analysis/projectDetector.js';
-import { generateInstallation, generateRun, generateBuild } from './src/repository-analysis/generators.js';
-import { fetchRepositoryFiles }           from './src/repository-analysis/githubFetcher.js';
+} from './fileSelector.js'
 
-// ═══════════════════════════════════════════
-// 파이프라인 
-// ═══════════════════════════════════════════
+function parsePackageScripts(selected) {
+  const packageFile = selected.packageConfig?.path?.endsWith('package.json')
+    ? selected.packageConfig
+    : null
+
+  if (!packageFile) return {}
+
+  try {
+    const packageJson = JSON.parse(packageFile.content)
+    return packageJson.scripts || {}
+  } catch {
+    return {}
+  }
+}
+
+function scriptCommand(packageManager, scriptName) {
+  if (!scriptName) return null
+  if (packageManager === 'yarn') return `yarn ${scriptName}`
+  if (packageManager === 'pnpm') return `pnpm ${scriptName}`
+  return scriptName === 'start' ? 'npm start' : `npm run ${scriptName}`
+}
+
+function detectInstallCommand(packageManager, selected) {
+  if (packageManager === 'yarn') return 'yarn install'
+  if (packageManager === 'pnpm') return 'pnpm install'
+  if (packageManager === 'npm') return 'npm install'
+  if (packageManager === 'poetry') return 'poetry install'
+  if (packageManager === 'pipenv') return 'pipenv install'
+  if (selected.requirementsTxt) return 'pip install -r requirements.txt'
+  if (packageManager === 'cargo') return 'cargo build'
+  if (packageManager === 'go modules') return 'go mod download'
+  if (packageManager === 'maven') return 'mvn install'
+  if (packageManager === 'gradle') return './gradlew build'
+  if (packageManager === 'bundler') return 'bundle install'
+  return 'No install command detected.'
+}
+
+function detectRunCommand(packageManager, scripts) {
+  const scriptName = ['dev', 'start', 'serve'].find((name) => scripts[name])
+  const command = scriptCommand(packageManager, scriptName)
+  if (command) return command
+  if (packageManager === 'cargo') return 'cargo run'
+  if (packageManager === 'go modules') return 'go run .'
+  return 'No run command detected.'
+}
+
+function detectBuildCommand(packageManager, scripts) {
+  const command = scriptCommand(packageManager, scripts.build ? 'build' : null)
+  if (command) return command
+  if (packageManager === 'cargo') return 'cargo build'
+  if (packageManager === 'go modules') return 'go build ./...'
+  if (packageManager === 'maven') return 'mvn package'
+  if (packageManager === 'gradle') return './gradlew build'
+  return 'No build command detected.'
+}
+
+function codeBlock(command) {
+  if (command.startsWith('No ')) return command
+  return `\`\`\`bash\n${command}\n\`\`\``
+}
 
 /**
- * @param {Record<string, string>} repoFiles  { '파일경로': '파일내용' }
+ * @param {Record<string, string>} repoFiles { '파일경로': '파일내용' }
  * @param {{ verbose?: boolean }} [options]
- * @returns {import('./src/schema.js').GeneratedReadme}
  */
 export function generateReadmeSections(repoFiles, options = {}) {
-  const { verbose = false } = options;
-  const allFilePaths = Object.keys(repoFiles);
+  const { verbose = false } = options
+  const { selected, packageManager } = selectFiles(repoFiles)
+  const scripts = parsePackageScripts(selected)
 
-  const { selected, packageManager } = selectFiles(repoFiles);
-  if (verbose) console.log(summarizeSelected(selected));
+  if (verbose) console.log(summarizeSelected(selected))
 
-  const project = detectProject(selected, packageManager, allFilePaths);
-  if (verbose) {
-    console.log(`[프로젝트 감지] type=${project.type} | lang=${project.language} | pm=${project.packageManager}`);
-    console.log(`  frameworks: ${project.frameworks.join(', ') || '(없음)'}`);
-    console.log(`  runtimes  : ${project.runtimes.join(', ')}`);
-    console.log(`  envVars   : ${Object.keys(project.envVars).join(', ') || '(없음)'}`);
+  const installation = detectInstallCommand(packageManager, selected)
+  const run = detectRunCommand(packageManager, scripts)
+  const build = detectBuildCommand(packageManager, scripts)
+
+  return {
+    installation: {
+      title: '## Installation',
+      content: codeBlock(installation),
+    },
+    run: {
+      title: '## Usage',
+      content: codeBlock(run),
+    },
+    build: {
+      title: '## Build',
+      content: codeBlock(build),
+    },
+    meta: {
+      packageManager,
+      selected,
+    },
   }
-
-  const installation = generateInstallation(project);
-  const run          = generateRun(project);
-  const build        = generateBuild(project);
-
-  return { installation, run, build, meta: project };
 }
 
 /**
  * HuggingFace README 생성 모델 입력을 만든다.
  *
- * @param {Record<string, string>} repoFiles  { '파일경로': '파일내용' }
+ * @param {Record<string, string>} repoFiles { '파일경로': '파일내용' }
  * @param {{ name?: string|null, description?: string|null }} [metadata]
- * @param {{ maxFiles?: number, maxTotalTokens?: number, profile?: import('./src/repository-analysis/fileSelector.js').Profile }} [options]
- * @returns {{ name: string, description: string, selectedFileContents: Array<{ path: string, content: string }> }}
+ * @param {{ maxFiles?: number, maxTotalTokens?: number, profile?: import('./fileSelector.js').Profile }} [options]
  */
 export function generateReadmeModelInput(repoFiles, metadata = {}, options = {}) {
-  return buildReadmeModelInput(repoFiles, metadata, options);
+  return buildReadmeModelInput(repoFiles, metadata, options)
 }
 
-/**
- * @param {import('./src/schema.js').GeneratedReadme} readme
- * @returns {string}
- */
 export function renderMarkdown(readme) {
   return [
     readme.installation.title,
@@ -63,46 +120,5 @@ export function renderMarkdown(readme) {
     readme.run.content,
     readme.build.title,
     readme.build.content,
-  ].join('\n\n');
+  ].join('\n\n')
 }
-
-// ═══════════════════════════════════════════
-// 실행 — GitHub 실제 저장소 분석
-// ═══════════════════════════════════════════
-
-// CLI: node index.js [owner] [repo]
-// 예:  node index.js vercel next.js
-//      node index.js tiangolo fastapi
-const [,, ownerArg, repoArg] = process.argv;
-
-const TARGETS = [
-  { owner: ownerArg || 'vercel', repo: repoArg || 'next.js' },
-];
-
-async function main() {
-  for (const { owner, repo } of TARGETS) {
-    console.log('═'.repeat(60));
-    console.log(`📦 ${owner}/${repo}`);
-    console.log('═'.repeat(60));
-
-    try {
-      const repoFiles = await fetchRepositoryFiles(owner, repo, {
-        token:    process.env.GITHUB_TOKEN,
-        maxFiles: 40,
-      });
-
-      const readme = generateReadmeSections(repoFiles, { verbose: true });
-
-      console.log('\n' + '─'.repeat(60));
-      console.log(renderMarkdown(readme));
-      console.log('─'.repeat(60));
-      console.log(`✅ type=${readme.meta.type} | frameworks=[${readme.meta.frameworks.join(', ')}]`);
-
-    } catch (err) {
-      console.error(`❌ ${owner}/${repo} 실패: ${err.message}`);
-      if (process.env.DEBUG) console.error(err.stack);
-    }
-  }
-}
-
-main();

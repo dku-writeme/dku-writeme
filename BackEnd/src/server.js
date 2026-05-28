@@ -3,11 +3,22 @@ import { deliverFileContents, deliverFileTree, deliverInfo } from './lib/deliver
 import { organizeReadmeData } from './lib/organizeReadmeData.js'
 import { selectImportantFiles } from './lib/selectImportantFiles.js'
 import dotenv from 'dotenv'
+
 dotenv.config()
+
+function parsePositiveInteger(value, fallback) {
+  const parsed = Number(value)
+  return Number.isFinite(parsed) && parsed > 0 ? parsed : fallback
+}
 
 // 서버가 실행될 주소와 포트를 환경변수로 변경할 수 있도록 구성
 const HOST = process.env.HOST || '127.0.0.1'
 const PORT = process.env.PORT || 3000
+const AI_ANALYSIS_URL = process.env.AI_ANALYSIS_URL || 'http://localhost:8000/analyze'
+const AI_ANALYSIS_TIMEOUT_MS = parsePositiveInteger(
+  process.env.AI_ANALYSIS_TIMEOUT_MS,
+  10000
+)
 
 // 프론트엔드 개발 서버에서 API 호출할 수 있도록 CORS 헤더 구성
 const corsHeaders = {
@@ -51,6 +62,63 @@ async function readJsonBody(request) {
   }
 }
 
+function normalizeAiFeatures(features) {
+  if (Array.isArray(features)) {
+    const normalizedFeatures = features
+      .map((feature) => String(feature).trim())
+      .filter(Boolean)
+
+    return normalizedFeatures.length > 0 ? normalizedFeatures : null
+  }
+
+  if (typeof features === 'string') {
+    const trimmedFeatures = features.trim()
+    return trimmedFeatures || null
+  }
+
+  return null
+}
+
+async function analyzeRepositoryWithAi(repoInfo, selectedFileContents) {
+  let description = repoInfo.description
+  let features = null
+
+  try {
+    const aiResponse = await fetch(AI_ANALYSIS_URL, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      signal: AbortSignal.timeout(AI_ANALYSIS_TIMEOUT_MS),
+      body: JSON.stringify({
+        name: repoInfo.name,
+        description: repoInfo.description,
+        selectedFileContents: selectedFileContents.map((file) => ({
+          path: file.path,
+          content: file.content,
+        })),
+      }),
+    })
+
+    if (aiResponse.ok) {
+      const aiResult = await aiResponse.json()
+      description =
+        typeof aiResult.description === 'string' && aiResult.description.trim()
+          ? aiResult.description.trim()
+          : description
+      features = normalizeAiFeatures(aiResult.features)
+    } else {
+      console.error('AI 서버 응답 오류:', aiResponse.status)
+    }
+  } catch (error) {
+    if (error.name === 'TimeoutError' || error.name === 'AbortError') {
+      console.error(`AI 서버 호출 시간 초과: ${AI_ANALYSIS_TIMEOUT_MS}ms`)
+    } else {
+      console.error('AI 서버 호출 실패:', error.message)
+    }
+  }
+
+  return { description, features }
+}
+
 async function handleGenerate(request, response) {
   let payload
 
@@ -71,76 +139,59 @@ async function handleGenerate(request, response) {
     return
   }
 
-  const repoInfo = await deliverInfo(owner, repo)
-
-  if (!repoInfo) {
-    sendJson(response, 404, {
-      message: 'GitHub 저장소 정보를 가져오지 못했습니다.',
-    })
-    return
-  }
-
-  const files = await deliverFileTree(owner, repo, repoInfo.defaultBranch)
-  const selectedFiles = selectImportantFiles(files)
-  const selectedFileContents = await deliverFileContents(
-    owner,
-    repo,
-    repoInfo.defaultBranch,
-    selectedFiles
-  )
-  
-  // AI 서버 호출
-  let description = repoInfo.description
-  let features = null
-
   try {
-    const aiResponse = await fetch('http://localhost:8000/analyze', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({
-        name: repoInfo.name,
-        description: repoInfo.description,
-        selectedFileContents: selectedFileContents.map(f => ({
-          path: f.path,
-          content: f.content
-        }))
+    const repoInfo = await deliverInfo(owner, repo)
+
+    if (!repoInfo) {
+      sendJson(response, 404, {
+        message: 'GitHub 저장소 정보를 가져오지 못했습니다.',
       })
+      return
+    }
+
+    const files = await deliverFileTree(owner, repo, repoInfo.defaultBranch)
+    const selectedFiles = selectImportantFiles(files)
+    const selectedFileContents = await deliverFileContents(
+      owner,
+      repo,
+      repoInfo.defaultBranch,
+      selectedFiles,
+      {
+        maxFiles: 30,
+        maxContentSize: 100000,
+      }
+    )
+
+    const aiAnalysis = await analyzeRepositoryWithAi(repoInfo, selectedFileContents)
+
+    const analyzedRepoInfo = {
+      ...repoInfo,
+      description: aiAnalysis.description,
+    }
+
+    // README 생성에 바로 활용할 수 있도록 저장소 정보와 핵심 파일 분석 정보를 정리
+    const readmeData = organizeReadmeData(
+      analyzedRepoInfo,
+      files,
+      selectedFiles,
+      selectedFileContents
+    )
+
+    // 정상 조회된 저장소 정보, 파일 목록, 핵심 파일 내용, README 생성용 데이터를 반환
+    sendJson(response, 200, {
+      ...analyzedRepoInfo,
+      features: aiAnalysis.features,
+      files,
+      selectedFiles,
+      selectedFileContents,
+      readmeData,
     })
-
-    if (aiResponse.ok) {
-      const aiResult = await aiResponse.json()
-      description = aiResult.description
-      features = aiResult.features
-    }
   } catch (error) {
-    console.error('AI 서버 호출 실패:', error.message)
+    console.error('README 생성 중 오류가 발생했습니다:', error)
+    sendJson(response, 500, {
+      message: 'README 생성 중 오류가 발생했습니다.',
+    })
   }
-
-  // 선별된 핵심 파일의 실제 내용을 조회
-  const selectedFileContents = await deliverFileContents(
-    owner,
-    repo,
-    repoInfo.defaultBranch,
-    selectedFiles,
-    {
-      maxFiles: 30,
-      maxContentSize: 100000,
-    }
-  )
-
-  // README 생성에 바로 활용할 수 있도록 저장소 정보와 핵심 파일 분석 정보를 정리
-  const readmeData = organizeReadmeData(repoInfo, files, selectedFiles, selectedFileContents)
-
-  // 정상 조회된 저장소 정보, 파일 목록, 핵심 파일 내용, README 생성용 데이터를 반환
-  sendJson(response, 200, {
-    ...repoInfo,
-    description,
-    features,
-    files,
-    selectedFiles,
-    selectedFileContents,
-    readmeData,
-  })
 }
 
 const server = http.createServer(async (request, response) => {
