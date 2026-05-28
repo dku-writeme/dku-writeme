@@ -5,8 +5,7 @@
   "type": "module",
   "scripts": {
     "dev": "node --watch src/server.js",
-    "start": "node src/server.js",
-    "test:github": "node src/test.js"
+    "start": "node src/server.js"
   },
   "dependencies": {
     "dotenv": "^17.4.2"
