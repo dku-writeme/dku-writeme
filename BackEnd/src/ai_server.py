@@ -67,14 +67,10 @@ async def analyze(req: AnalyzeRequest):
     # 질문 1. 프로젝트 설명 (description 없을 때만 AI 사용)
     if not req.description or req.description in ("None", ""):
         print("💡 [INFO] description이 없거나 비어 있습니다. ➡️ AI 분석을 호출합니다.")
-        prompt_desc = f"""아래는 GitHub 저장소의 파일 목록과 내용입니다.
-
-        [데이터]
+        prompt_desc = f"""
+        다음 코드를 보고 프로젝트를 설명해주세요.
         {context}
-
-        이 프로그램을 한 줄로 설명하시오.
-        - 마크다운 없이 순수 텍스트 한 문장으로만 출력
-        - 한국어만 사용"""
+        """
         description = call_ai(prompt_desc)
     else:
         print(f"✅ [INFO] 기존 description이 존재합니다. AI를 사용하지 않고 기존 데이터를 유지합니다.")
@@ -82,29 +78,10 @@ async def analyze(req: AnalyzeRequest):
         description = req.description
 
     # 질문 2. 주요 기능 추출
-    prompt_features = f"""아래는 GitHub 저장소의 파일 목록과 내용입니다.
-
-    [데이터]
+        prompt_features = f"""
+    다음 코드를 보고 주요 기능을 알려주세요.
     {context}
-
-    이 프로그램의 주요 기능을 2~5가지로 작성하시오.
-
-    [출력 규칙 - 반드시 준수]
-    - 형식: "- 기능명: 설명" 한 줄로만
-    - 설명은 20자 이내로 간결하게
-    - 파일명, 함수명, 변수명 언급 금지
-    - 사용자 관점에서 "무엇을 하는가"만 작성
-    - 한국어만 사용
-    - 코드에서 확인된 것만, 추측 금지
-    - 코드에 없는 기능은 절대 작성하지 말 것
-    - 확인되지 않은 기능은 목록에서 제외할 것
-
-    [좋은 예시]
-    - 주식 가격 수집: 지정한 종목의 실시간 주가를 가져옵니다.
-    - 조건 알림: 목표가 초과 시 자동으로 알림을 발송합니다.
-
-    [나쁜 예시 - 이렇게 하지 말 것]
-    - collector.py의 fetch_data 함수가 yfinance를 사용해서 주가 데이터를..."""
+    """
     features = call_ai(prompt_features)
     
     print("\n" + "="*40)
