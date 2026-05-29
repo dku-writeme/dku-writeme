@@ -1,9 +1,7 @@
 // fileSelector.js
 import { FILE_PRIORITY_RULES } from './schema.js';
 
-// ═══════════════════════════════════════════════════════
 // glob / matchesAny / pickFirst 유틸 
-// ═══════════════════════════════════════════════════════
 
 function globToRegex(pattern) {
   const escaped = pattern
@@ -52,11 +50,9 @@ function pickRequirementsTxt(fileMap) {
   return pickFirst(fileMap, candidates, 'config');
 }
 
-// ═══════════════════════════════════════════════════════
 // detectPackageManager
 // - 반드시 manifest(package.json 등)가 있을 때만 해당 PM 반환
 // - lock 파일 단독으로 PM을 결정하지 않음
-// ═══════════════════════════════════════════════════════
 
 function detectPackageManager(fileMap) {
   const paths = [...fileMap.keys()];
@@ -92,9 +88,7 @@ function detectPackageManager(fileMap) {
   return null;
 }
 
-// ═══════════════════════════════════════════════════════
 // 확장자 필터 
-// ═══════════════════════════════════════════════════════
 
 const INCLUDE_EXT = new Set([
   '.js', '.mjs', '.cjs', '.jsx',
@@ -144,9 +138,7 @@ function passExtFilter(filePath) {
   return INCLUDE_EXT.has(ext);
 }
 
-// ═══════════════════════════════════════════════════════
 // 블랙리스트
-// ═══════════════════════════════════════════════════════
 
 const BLACKLIST_DIRS = new Set([
   'node_modules', 'vendor', 'venv', '.venv', 'env',
@@ -180,9 +172,7 @@ function passBlacklist(filePath) {
   return true;
 }
 
-// ═══════════════════════════════════════════════════════
 // 가중치 scoring
-// ═══════════════════════════════════════════════════════
 
 /**
  * @typedef {'frontend'|'api'|'cli'|'unknown'} Profile
@@ -247,9 +237,7 @@ function calcScore(filePath, profile) {
   return Math.max(0, score);
 }
 
-// ═══════════════════════════════════════════════════════
 // detectProfile — score 기반 heuristic
-// ═══════════════════════════════════════════════════════
 
 /**
  * 경로 신호 점수표
@@ -376,9 +364,7 @@ function detectProfile(paths, fileMap) {
   return (best[1] > 0) ? best[0] : 'unknown';
 }
 
-// ═══════════════════════════════════════════════════════
 // monorepo 감지
-// ═══════════════════════════════════════════════════════
 
 /**
  * monorepo 하위 프로젝트 루트 디렉토리 패턴
@@ -462,9 +448,7 @@ export function detectMonorepo(paths) {
   return { isMonorepo, subProjects, primaryRoot };
 }
 
-// ═══════════════════════════════════════════════════════
 // selectFilesForLLM
-// ═══════════════════════════════════════════════════════
 
 /**
  * @typedef {Object} ScoredFile
@@ -561,9 +545,7 @@ export function buildLLMContext(result) {
   ].join('\n');
 }
 
-// ═══════════════════════════════════════════════════════
 // README 모델 입력 생성
-// ═══════════════════════════════════════════════════════
 
 function parsePackageMetadata(files) {
   const fileMap = files instanceof Map ? files : new Map(Object.entries(files));
@@ -619,9 +601,7 @@ export function buildReadmeModelInput(files, metadata = {}, options = {}) {
 }
 
 
-// ═══════════════════════════════════════════════════════
 // selectFiles — README 생성용 대표 파일 선별 (API 유지)
-// ═══════════════════════════════════════════════════════
 
 export function selectFiles(files) {
   const fileMap = files instanceof Map
@@ -643,9 +623,7 @@ export function selectFiles(files) {
   return { selected, packageManager };
 }
 
-// ═══════════════════════════════════════════════════════
 // summarizeSelected (API 유지)
-// ═══════════════════════════════════════════════════════
 
 export function summarizeSelected(selected) {
   const lines = ['[파일 선별 결과]'];

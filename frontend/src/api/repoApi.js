@@ -1,4 +1,11 @@
 // 백엔드에서 받아온 저장소 정보를 README markdown으로 변환하는 템플릿 모음
+const DEFAULT_API_BASE_URL = 'http://localhost:3000'
+const API_BASE_URL = (
+  import.meta.env?.VITE_API_BASE_URL || DEFAULT_API_BASE_URL
+).replace(/\/+$/, '')
+
+const buildApiUrl = (path) => `${API_BASE_URL}${path}`
+
 // 토픽 목록이 비어있으면 README에 None으로 표시
 const formatTopics = (topics) => {
   if (!topics || topics.length === 0) {
@@ -17,40 +24,86 @@ const formatDate = (date) => {
   return new Date(date).toLocaleDateString()
 }
 
-// selectedFileContents에서 package.json을 찾아 scripts 추출
-function extractScripts(selectedFileContents) {
-  if (!selectedFileContents || selectedFileContents.length === 0) {
-    return { install: 'npm install', dev: 'npm run dev' }
+const findPackageJson = (selectedFileContents = []) =>
+  selectedFileContents.find((file) => file.path?.split('/').pop() === 'package.json')
+
+const extractPackageScripts = (repoInfo) => {
+  const scripts = repoInfo.readmeData?.analysis?.scripts || {}
+
+  if (Object.keys(scripts).length > 0) {
+    return scripts
   }
 
-  const packageJson = selectedFileContents.find(
-    (f) => f.path === 'package.json'
-  )
+  const packageJson = findPackageJson(repoInfo.selectedFileContents)
 
   if (!packageJson) {
-    return { install: 'npm install', dev: 'npm run dev' }
+    return null
   }
 
   try {
     const parsed = JSON.parse(packageJson.content)
-    const scripts = parsed.scripts || {}
-
-    // 실행 명령어 우선순위: dev > start > serve
-    const devScript = scripts.dev
-      ? `npm run dev`
-      : scripts.start
-      ? `npm start`
-      : scripts.serve
-      ? `npm run serve`
-      : 'npm run dev'
-
-    return {
-      install: 'npm install',
-      dev: devScript
-    }
+    return parsed.scripts || {}
   } catch {
-    return { install: 'npm install', dev: 'npm run dev' }
+    return {}
   }
+}
+
+// selectedFileContents에서 package.json을 찾아 scripts 추출
+function extractScripts(repoInfo) {
+  const scripts = extractPackageScripts(repoInfo)
+
+  if (!scripts) {
+    return {
+      install: 'No install command detected.',
+      dev: 'No run command detected.',
+    }
+  }
+
+  // 실행 명령어 우선순위: dev > start > serve
+  const devScript = scripts.dev
+    ? 'npm run dev'
+    : scripts.start
+      ? 'npm start'
+      : scripts.serve
+        ? 'npm run serve'
+        : 'No run command detected.'
+
+  return {
+    install: 'npm install',
+    dev: devScript,
+  }
+}
+
+const formatFeatures = (features) => {
+  if (Array.isArray(features) && features.length > 0) {
+    return features
+      .map((feature) => String(feature).trim())
+      .filter(Boolean)
+      .map((feature) => `- ${feature.replace(/^-+\s*/, '')}`)
+      .join('\n')
+  }
+
+  if (typeof features === 'string' && features.trim()) {
+    return features
+      .trim()
+      .split(/\r?\n/)
+      .map((feature) => feature.trim())
+      .filter(Boolean)
+      .map((feature) => (feature.startsWith('- ') ? feature : `- ${feature}`))
+      .join('\n')
+  }
+
+  return '- None'
+}
+
+const formatLicense = (license) => {
+  if (!license || license === 'None') {
+    return 'No license information provided.'
+  }
+
+  return `This project is licensed under the ${license} License.`
+}
+
 // README 생성에 활용할 핵심 파일 목록을 markdown 리스트 형태로 변환
 const formatImportantFiles = (readmeData) => {
   // 백엔드에서 정리한 핵심 파일 목록이 없으면 None으로 표시
@@ -103,9 +156,9 @@ const formatProjectStructure = (readmeData) => {
 const TEMPLATE_BUILDERS = {
   // 기본 정보, 설치, 사용법, 기능, 라이선스 섹션을 포함한 기본 템플릿 구성
   basic: (repoInfo) => {
-  const scripts = extractScripts(repoInfo.selectedFileContents)
+    const scripts = extractScripts(repoInfo)
 
-  return `# ${repoInfo.name}
+    return `# ${repoInfo.name}
 
 ## Repository Information
 
@@ -133,10 +186,7 @@ ${scripts.dev}
 
 ## Features
 
-${repoInfo.features || '- 기능 정보를 불러오는 중 오류가 발생했습니다.'}
-- GitHub repository summary
-- README template generation
-- GitHub file analysis for README generation
+${formatFeatures(repoInfo.features)}
 
 ## Project Structure
 
@@ -152,8 +202,9 @@ ${formatScripts(repoInfo.readmeData)}
 
 ## License
 
-This project is licensed under the ${repoInfo.license} License.
-`,
+${formatLicense(repoInfo.license)}
+`
+  },
   // 저장소 설명과 기술 스택, 링크만 간단히 보여주는 심플 템플릿 구성
   simple: (repoInfo) => `# ${repoInfo.fullName}
 
@@ -211,28 +262,28 @@ export async function requestReadme(owner, repo, template = 'basic') {
 
   try {
     // 백엔드 API에 owner, repo 정보를 POST 방식으로 전달
-    const response = await fetch('http://localhost:3000/api/generate', {
+    const response = await fetch(buildApiUrl('/api/generate'), {
       method: 'POST',
-      headers: {'Content-Type': 'application/json'},
-      body: JSON.stringify({owner,repo})
-    });
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ owner, repo }),
+    })
 
     // 백엔드 응답 body를 JSON 객체로 변환
     const repoInfo = await response.json()
 
     if (!response.ok) {
       // 백엔드에서 전달한 에러 메시지가 있으면 해당 메시지로 에러 처리
-      throw new Error(repoInfo.message || "서버 응답 에러");
+      throw new Error(repoInfo.message || '서버 응답 에러')
     }
 
     // 선택된 템플릿으로 README markdown을 생성해 repo 원본 정보와 함께 반환
     return {
       markdown: TEMPLATE_BUILDERS[selectedTemplate](repoInfo),
-      repo: repoInfo
-    };
-  } catch(error) {
+      repo: repoInfo,
+    }
+  } catch (error) {
     // App.jsx에서 alert로 보여줄 수 있도록 에러를 다시 던짐
-    console.error("README 생성 오류: ", error);
-    throw error;
+    console.error('README 생성 오류: ', error)
+    throw error
   }
 }

@@ -1,4 +1,5 @@
 // README 생성에 바로 사용할 수 있도록 저장소/파일/분석 정보를 한 구조로 정리함
+import { buildReadmeModelInput, selectFilesForLLM } from '../repository-analysis/fileSelector.js'
 
 function getTopLevelDirectories(files) {
   // 전체 파일 경로에서 최상위 폴더명만 중복 없이 수집
@@ -62,10 +63,51 @@ function getContentPreview(content) {
     .join('\n')
 }
 
+function buildContentMap(selectedFileContents) {
+  // repository-analysis 모듈이 요구하는 { path: content } 형태로 변환
+  return selectedFileContents.reduce((fileMap, file) => {
+    fileMap[file.path] = file.content
+    return fileMap
+  }, {})
+}
+
+function buildRepositoryAnalysis(repoInfo, selectedFileContents) {
+  const fileContentMap = buildContentMap(selectedFileContents)
+  const selection = selectFilesForLLM(fileContentMap, {
+    maxFiles: 15,
+    maxTotalTokens: 24000,
+  })
+
+  return {
+    modelInput: buildReadmeModelInput(
+      fileContentMap,
+      {
+        name: repoInfo.name,
+        description: repoInfo.description === 'None' ? '' : repoInfo.description,
+      },
+      {
+        maxFiles: 15,
+        maxTotalTokens: 24000,
+      }
+    ),
+    selection: {
+      profile: selection.profile,
+      totalTokens: selection.totalTokens,
+      monorepo: selection.monorepo,
+      files: selection.files.map((file) => ({
+        path: file.path,
+        score: file.score,
+        profile: file.profile,
+      })),
+    },
+  }
+}
+
 export function organizeReadmeData(repoInfo, files, selectedFiles, selectedFileContents) {
   // 핵심 파일 내용에서 package.json과 기존 README 여부를 먼저 분석
   const packageJson = parsePackageJson(selectedFileContents)
   const existingReadme = selectedFileContents.find(isReadmeFile)
+  const repositoryAnalysis = buildRepositoryAnalysis(repoInfo, selectedFileContents)
 
   return {
     // README 상단 정보와 링크 영역에 사용할 저장소 기본 정보
@@ -115,6 +157,9 @@ export function organizeReadmeData(repoInfo, files, selectedFiles, selectedFileC
       scripts: packageJson?.scripts || {},
       dependencies: packageJson?.dependencies || [],
       devDependencies: packageJson?.devDependencies || [],
+      repositoryProfile: repositoryAnalysis.selection.profile,
+      monorepo: repositoryAnalysis.selection.monorepo,
+      totalTokens: repositoryAnalysis.selection.totalTokens,
       suggestedSections: [
         '프로젝트 소개',
         '주요 기능',
@@ -123,5 +168,9 @@ export function organizeReadmeData(repoInfo, files, selectedFiles, selectedFileC
         '라이선스',
       ],
     },
+    // C: HuggingFace README 생성 프롬프트에 바로 전달할 수 있는 모델 입력
+    modelInput: repositoryAnalysis.modelInput,
+    // B: repository-analysis가 최종 선별한 파일과 분석 메타데이터
+    repositoryAnalysis: repositoryAnalysis.selection,
   }
 }
