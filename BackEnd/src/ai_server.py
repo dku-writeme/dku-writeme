@@ -67,19 +67,12 @@ async def analyze(req: AnalyzeRequest):
     # 질문 1. 프로젝트 설명 (description 없을 때만 AI 사용)
     if not req.description or req.description in ("None", ""):
         print("💡 [INFO] description이 없거나 비어 있습니다. ➡️ AI 분석을 호출합니다.")
-<<<<<<< Updated upstream
-        prompt_desc = f"""
-        다음 코드를 보고 프로젝트를 설명해주세요.
-        {context}
-        """
-=======
         prompt_desc = f"""아래는 GitHub 저장소의 파일 목록과 내용입니다.
         [데이터]
         {context}
         이 프로그램을 한 줄로 설명하시오.
         - 마크다운 없이 순수 텍스트 한 문장으로만 출력
         - 한국어만 사용"""
->>>>>>> Stashed changes
         description = call_ai(prompt_desc)
     else:
         print(f"✅ [INFO] 기존 description이 존재합니다. AI를 사용하지 않고 기존 데이터를 유지합니다.")
@@ -87,11 +80,6 @@ async def analyze(req: AnalyzeRequest):
         description = req.description
 
     # 질문 2. 주요 기능 추출
-<<<<<<< Updated upstream
-        prompt_features = f"""
-    다음 코드를 보고 주요 기능을 알려주세요.
-    {context}
-=======
     prompt_features = f"""아래는 GitHub 저장소의 파일 목록과 내용입니다.
     [데이터]
     {context}
@@ -119,7 +107,6 @@ async def analyze(req: AnalyzeRequest):
     - 리액트 웹 게임 개발: 여러 리액트를 기반으로 한 웹 게임을 개발합니다. (너무 포괄적)
     - 구구단 게임: 구구단을 맞추는 게임입니다. (개별 나열)
     - Webpack 환경 구축: Babel과 Webpack을 사용합니다. (개발 도구 언급)
->>>>>>> Stashed changes
     """
     features = call_ai(prompt_features)
     
