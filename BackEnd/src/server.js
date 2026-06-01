@@ -1,10 +1,16 @@
 import http from 'node:http'
-import { deliverFileContents, deliverFileTree, deliverInfo } from './lib/deliverInfo.js'
+import {
+  GithubApiError,
+  deliverFileContents,
+  deliverFileTree,
+  deliverInfo,
+} from './lib/deliverInfo.js'
 import { organizeReadmeData } from './lib/organizeReadmeData.js'
 import { selectImportantFiles } from './lib/selectImportantFiles.js'
 import dotenv from 'dotenv'
 
 dotenv.config()
+dotenv.config({ path: new URL('./.env', import.meta.url), override: false })
 
 function parsePositiveInteger(value, fallback) {
   const parsed = Number(value)
@@ -77,6 +83,24 @@ function normalizeAiFeatures(features) {
   }
 
   return null
+}
+
+function githubErrorMessage(error) {
+  if (error.status === 403) {
+    const rateLimitRemaining = error.details?.rateLimitRemaining
+
+    if (rateLimitRemaining === '0') {
+      return 'GitHub API 요청 한도를 초과했습니다. GITHUB_TOKEN을 설정하거나 잠시 후 다시 시도해주세요.'
+    }
+
+    return 'GitHub 저장소 접근이 거부되었습니다. private 저장소이거나 GITHUB_TOKEN 권한이 부족할 수 있습니다.'
+  }
+
+  if (error.status === 404) {
+    return 'GitHub 저장소를 찾을 수 없습니다. owner/repo 이름과 공개 여부를 확인해주세요.'
+  }
+
+  return `GitHub API 요청에 실패했습니다. (${error.status}) ${error.message}`
 }
 
 async function analyzeRepositoryWithAi(repoInfo, selectedFileContents) {
@@ -187,6 +211,16 @@ async function handleGenerate(request, response) {
       readmeData,
     })
   } catch (error) {
+    if (error instanceof GithubApiError) {
+      console.error('GitHub API 오류:', error.status, error.message)
+      sendJson(response, error.status, {
+        message: githubErrorMessage(error),
+        githubStatus: error.status,
+        githubMessage: error.message,
+      })
+      return
+    }
+
     console.error('README 생성 중 오류가 발생했습니다:', error)
     sendJson(response, 500, {
       message: 'README 생성 중 오류가 발생했습니다.',
