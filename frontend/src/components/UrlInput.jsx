@@ -1,3 +1,5 @@
+import { SparkleIcon } from './Icons.jsx'
+
 // GitHub 저장소 URL을 입력받고 README 생성 submit 이벤트를 발생시키는 컴포넌트
 function UrlInput({ url, onChange, onSubmit, loading }) {
   return (
@@ -10,7 +12,11 @@ function UrlInput({ url, onChange, onSubmit, loading }) {
         aria-label="GitHub repository URL"
       />
       <button type="submit" disabled={loading}>
-        {/* loading 상태에 따라 버튼 문구와 disabled 상태가 App에서 제어됨 */}
+        {loading ? (
+          <span className="button-spinner" aria-hidden="true" />
+        ) : (
+          <SparkleIcon />
+        )}
         {loading ? '생성 중...' : 'README 생성'}
       </button>
     </form>
