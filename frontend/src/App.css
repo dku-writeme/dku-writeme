@@ -1,3 +1,5 @@
+@import url("https://cdn.jsdelivr.net/gh/orioncactus/pretendard/dist/web/variable/pretendardvariable.css");
+
 :root {
   --bg: #f5f5f7;
   --surface: rgba(255, 255, 255, 0.86);
@@ -32,7 +34,7 @@ body {
     linear-gradient(135deg, rgba(0, 122, 255, 0.08), transparent 34%),
     linear-gradient(180deg, #ffffff 0%, var(--bg) 48%, #ececf1 100%);
   font-family:
-    -apple-system, BlinkMacSystemFont, "SF Pro Display", "SF Pro Text", Inter, "Segoe UI",
+    "Pretendard Variable", Pretendard, -apple-system, BlinkMacSystemFont, system-ui,
     sans-serif;
   -webkit-font-smoothing: antialiased;
   text-rendering: geometricPrecision;
@@ -556,16 +558,117 @@ button {
   line-height: 1.55;
 }
 
+.analysis-summary {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) 210px;
+  gap: 10px;
+}
+
+.analysis-flow,
 .analysis-metrics {
+  min-width: 0;
+}
+
+.analysis-flow {
+  padding: 12px;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: rgba(255, 255, 255, 0.58);
+}
+
+.analysis-flow h3 {
+  margin: 0 0 10px;
+  color: var(--ink);
+  font-size: 13px;
+  font-weight: 850;
+}
+
+.analysis-flow ol {
   display: grid;
   grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 8px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.analysis-flow li {
+  position: relative;
+  display: grid;
+  min-width: 0;
+  gap: 3px;
+  padding: 10px 11px 10px 34px;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: rgba(255, 255, 255, 0.68);
+}
+
+.analysis-flow li + li::before {
+  position: absolute;
+  top: 50%;
+  left: -8px;
+  color: var(--muted);
+  font-size: 14px;
+  font-weight: 850;
+  transform: translate(-50%, -50%);
+  content: ">";
+}
+
+.analysis-flow li span {
+  position: absolute;
+  top: 10px;
+  left: 10px;
+  display: grid;
+  width: 18px;
+  height: 18px;
+  place-items: center;
+  border-radius: 6px;
+  color: var(--accent-strong);
+  background: rgba(0, 122, 255, 0.08);
+  font-size: 11px;
+  font-weight: 850;
+}
+
+.analysis-flow strong {
+  color: var(--ink);
+  font-size: 20px;
+  font-weight: 850;
+  line-height: 1;
+}
+
+.analysis-flow em {
+  color: #3a3a3c;
+  font-size: 12px;
+  font-style: normal;
+  font-weight: 850;
+}
+
+.analysis-flow small {
+  color: var(--muted);
+  font-size: 11px;
+  font-weight: 700;
+  line-height: 1.3;
+}
+
+.analysis-flow-primary {
+  border-color: rgba(0, 122, 255, 0.24);
+  background: rgba(0, 122, 255, 0.08);
+}
+
+.analysis-flow-primary span {
+  color: #ffffff;
+  background: var(--accent);
+}
+
+.analysis-metrics {
+  display: grid;
   gap: 9px;
   margin: 0;
 }
 
 .analysis-metrics div {
   min-width: 0;
-  padding: 10px 11px;
+  padding: 12px;
   border: 1px solid var(--line);
   border-radius: 8px;
   background: rgba(255, 255, 255, 0.68);
@@ -1081,6 +1184,10 @@ button {
     grid-template-columns: 1fr;
   }
 
+  .analysis-summary {
+    grid-template-columns: 1fr;
+  }
+
   .analysis-detected,
   .analysis-files ul {
     grid-template-columns: 1fr;
@@ -1127,8 +1234,14 @@ button {
   }
 
   .analysis-report-header,
-  .analysis-metrics {
+  .analysis-flow ol {
     grid-template-columns: 1fr;
+  }
+
+  .analysis-flow li + li::before {
+    top: -7px;
+    left: 50%;
+    transform: translate(-50%, -50%) rotate(90deg);
   }
 
   .analysis-status-icon {

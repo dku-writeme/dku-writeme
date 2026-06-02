@@ -94,26 +94,48 @@ function AnalysisReport({ report }) {
         {report.message || STATUS_DESCRIPTIONS[status] || STATUS_DESCRIPTIONS.fallback}
       </p>
 
-      <dl className="analysis-metrics">
-        <div>
-          <dt>분석 파일</dt>
-          <dd>
-            {report.analyzedFileCount}/{report.selectedFileCount}
-          </dd>
-        </div>
-        <div>
-          <dt>전체 파일</dt>
-          <dd>{report.totalFileCount}</dd>
-        </div>
-        <div>
-          <dt>소요 시간</dt>
-          <dd>{formatDuration(report.durationMs)}</dd>
-        </div>
-        <div>
-          <dt>토큰 추정</dt>
-          <dd>{report.totalTokens || 0}</dd>
-        </div>
-      </dl>
+      <div className="analysis-summary">
+        <section className="analysis-flow" aria-label="AI analysis file flow">
+          <h3>분석 범위</h3>
+          <ol>
+            <li>
+              <span>1</span>
+              <strong>{report.totalFileCount}개</strong>
+              <em>저장소 파일</em>
+              <small>GitHub 파일 트리</small>
+            </li>
+            <li>
+              <span>2</span>
+              <strong>{report.selectedFileCount}개</strong>
+              <em>후보 선별</em>
+              <small>중요 파일 후보</small>
+            </li>
+            <li>
+              <span>3</span>
+              <strong>{report.contentFileCount}개</strong>
+              <em>내용 조회</em>
+              <small>파일 내용 읽음</small>
+            </li>
+            <li className="analysis-flow-primary">
+              <span>4</span>
+              <strong>{report.analyzedFileCount}개</strong>
+              <em>AI 전달</em>
+              <small>최종 모델 입력</small>
+            </li>
+          </ol>
+        </section>
+
+        <dl className="analysis-metrics">
+          <div>
+            <dt>소요 시간</dt>
+            <dd>{formatDuration(report.durationMs)}</dd>
+          </div>
+          <div>
+            <dt>토큰 추정</dt>
+            <dd>{report.totalTokens || 0}</dd>
+          </div>
+        </dl>
+      </div>
 
       <div className="analysis-detected">
         <div>
@@ -142,7 +164,7 @@ function AnalysisReport({ report }) {
           <div>
             <h3>AI에 전달된 파일</h3>
             <p>
-              총 {allAnalyzedFiles.length}개 중 {analyzedFiles.length}개 표시
+              AI 전달 파일 {allAnalyzedFiles.length}개 중 {analyzedFiles.length}개 표시
             </p>
           </div>
           {allAnalyzedFiles.length > 4 && (
@@ -164,7 +186,7 @@ function AnalysisReport({ report }) {
         </ul>
         {hasHiddenFiles && (
           <p className="analysis-files-note">
-            나머지 {allAnalyzedFiles.length - visibleFileLimit}개 파일도 분석에 사용되었습니다.
+            나머지 {allAnalyzedFiles.length - visibleFileLimit}개 파일
           </p>
         )}
       </div>
