@@ -14,6 +14,17 @@ export function parseGithubUrl(url) {
     throw new Error(INVALID_GITHUB_URL_MESSAGE)
   }
 
+  const sshUrlMatch = trimmedUrl.match(
+    /^git@github\.com:([^/\s]+)\/([^/\s]+?)(?:\.git)?$/
+  )
+
+  if (sshUrlMatch) {
+    return {
+      owner: sshUrlMatch[1],
+      repo: sshUrlMatch[2],
+    }
+  }
+
   // github.com으로 바로 시작하는 경우 URL 객체가 해석할 수 있도록 https:// 처리
   const normalizedUrl = trimmedUrl.startsWith('github.com/')
     ? `https://${trimmedUrl}`
@@ -29,17 +40,18 @@ export function parseGithubUrl(url) {
   }
 
   // GitHub 저장소 URL만 허용
-  if (parsedUrl.hostname !== 'github.com') {
+  if (!['github.com', 'www.github.com'].includes(parsedUrl.hostname)) {
     throw new Error(INVALID_GITHUB_URL_MESSAGE)
   }
 
   // /owner/repo 형태에서 owner와 repo만 추출하고 '/' 는 제거
-  const [owner, repo, ...rest] = parsedUrl.pathname
+  const [owner, rawRepo] = parsedUrl.pathname
     .split('/')
     .filter(Boolean)
+  const repo = rawRepo?.replace(/\.git$/, '')
 
-  // owner/repo가 부족하거나 추가 경로가 있으면 에러 발생 시킴
-  if (!owner || !repo || rest.length > 0) {
+  // owner/repo가 부족하면 에러 발생 시킴
+  if (!owner || !repo) {
     throw new Error(INVALID_GITHUB_URL_MESSAGE)
   }
 

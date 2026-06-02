@@ -1,15 +1,12 @@
 // fileSelector.js
 import { FILE_PRIORITY_RULES } from './schema.js';
 
-// ═══════════════════════════════════════════════════════
 // glob / matchesAny / pickFirst 유틸 
-// ═══════════════════════════════════════════════════════
 
 function globToRegex(pattern) {
   const escaped = pattern
     .replace(/[.+?^${}()|[\]\\]/g, '\\$&')
-    .replace(/\*/g, '.*');
-
+    .replace(/\\\*/g, '.*');   
   return new RegExp(`(^|/)${escaped}$`);
 }
 
@@ -52,11 +49,9 @@ function pickRequirementsTxt(fileMap) {
   return pickFirst(fileMap, candidates, 'config');
 }
 
-// ═══════════════════════════════════════════════════════
 // detectPackageManager
 // - 반드시 manifest(package.json 등)가 있을 때만 해당 PM 반환
 // - lock 파일 단독으로 PM을 결정하지 않음
-// ═══════════════════════════════════════════════════════
 
 function detectPackageManager(fileMap) {
   const paths = [...fileMap.keys()];
@@ -92,9 +87,7 @@ function detectPackageManager(fileMap) {
   return null;
 }
 
-// ═══════════════════════════════════════════════════════
 // 확장자 필터 
-// ═══════════════════════════════════════════════════════
 
 const INCLUDE_EXT = new Set([
   '.js', '.mjs', '.cjs', '.jsx',
@@ -144,9 +137,8 @@ function passExtFilter(filePath) {
   return INCLUDE_EXT.has(ext);
 }
 
-// ═══════════════════════════════════════════════════════
 // 블랙리스트
-// ═══════════════════════════════════════════════════════
+
 
 const BLACKLIST_DIRS = new Set([
   'node_modules', 'vendor', 'venv', '.venv', 'env',
@@ -180,9 +172,22 @@ function passBlacklist(filePath) {
   return true;
 }
 
-// ═══════════════════════════════════════════════════════
+const MAX_CONTEXT_FILE_CHARS = 8_000;
+
+function truncateForContext(content) {
+  const text = content || '';
+  return text.length > MAX_CONTEXT_FILE_CHARS
+    ? text.slice(0, MAX_CONTEXT_FILE_CHARS) + '\n// [TRUNCATED]'
+    : text;
+}
+
+function markdownFenceFor(content) {
+  const runs = String(content || '').match(/`{3,}/g) || [];
+  const maxRun = runs.reduce((max, run) => Math.max(max, run.length), 2);
+  return '`'.repeat(maxRun + 1);
+}
+
 // 가중치 scoring
-// ═══════════════════════════════════════════════════════
 
 /**
  * @typedef {'frontend'|'api'|'cli'|'unknown'} Profile
@@ -208,7 +213,7 @@ const PROFILE_RULES = {
     { re: /(^|\/)utils?\/.+\.[jt]sx?$/, score: 45 },
   ],
   api: [
-     { re: /(^|\/)(routes?|router)\/.+/, score: 80 },          // 라우팅
+    { re: /(^|\/)(routes?|router)\/.+/, score: 80 },          // 라우팅
     { re: /(^|\/)(controllers?|handlers?)\/.+/, score: 80 },  // 컨트롤러
     { re: /(^|\/)services?\/.+/, score: 75 },                 // 비즈니스 로직
     { re: /(^|\/)middleware(s?)?\/.+/, score: 65 },
@@ -227,29 +232,171 @@ const PROFILE_RULES = {
   unknown: [],
 };
 
-function calcScore(filePath, profile) {
+const KEY_FILENAME_RULES = [
+  // 파일명 자체가 실행 진입점/핵심 계층임을 나타내는 경우
+  { re: /^(package\.json|pyproject\.toml|pom\.xml|build\.gradle(\.kts)?|Cargo\.toml|go\.mod)$/, score: 75 },
+  { re: /^(main|app|index|server)\.(js|jsx|ts|tsx|mjs|cjs|py|go|rs)$/, score: 55 },
+  { re: /^.*Application\.java$/, score: 60 },
+  { re: /^(page|layout|template|loading|error|route)\.(js|jsx|ts|tsx)$/, score: 48 },
+  { re: /(^|[._-])(routes?|controllers?|services?|handlers?|middlewares?|providers?|modules?)([._-]|$)/i, score: 58 },
+  { re: /(^|[._-])(config|settings|bootstrap|startup|kernel)([._-]|$)/i, score: 32 },
+];
+
+const KEY_PATH_RULES = [
+  // 경로 구조가 프레임워크 라우팅/서버 계층을 드러내는 경우
+  { re: /(^|\/)(app|pages)\/.*(page|layout|route)\.[jt]sx?$/, score: 50 },
+  { re: /(^|\/)(app|pages|views|screens)\//, score: 36 },
+  { re: /(^|\/)api\//, score: 34 },
+  { re: /(^|\/)(routes?|router)\//, score: 40 },
+  { re: /(^|\/)(controllers?|handlers?)\//, score: 42 },
+  { re: /(^|\/)services?\//, score: 36 },
+  { re: /(^|\/)middleware(s?)?\//, score: 32 },
+  { re: /(^|\/)(models?|entities|schemas?)\//, score: 24 },
+  { re: /(^|\/)(repositories?|dao)\//, score: 24 },
+  { re: /(^|\/)(logic|core|domain)\//, score: 28 },
+  { re: /(^|\/)src\/main\//, score: 38 },
+  { re: /(^|\/)(cmd|commands?|bin)\//, score: 36 },
+  { re: /(^|\/)(lib|shared|config)\//, score: 20 },
+];
+
+const FRAMEWORK_ENTRY_RULES = [
+  // 프레임워크별 관례적 entrypoint는 깊은 경로라도 우선한다.
+  { re: /(^|\/)(app|pages)\/.*(page|layout)\.[jt]sx?$/, score: 45 },
+  { re: /(^|\/)(server|app|index)\.(js|ts|mjs|cjs)$/, score: 42 },
+  { re: /(^|\/).*Application\.java$/, score: 48 },
+  { re: /(^|\/)main\.go$/, score: 45 },
+  { re: /(^|\/)src\/main\.rs$/, score: 45 },
+];
+
+const FILE_CONTENT_RULES = [
+  // import/annotation/bootstrap 코드로 실제 런타임 핵심 파일을 보정한다.
+  { re: /from ['"]react['"]|import React|from ['"]next\//, score: 26 },
+  { re: /export default function|export default async function/, score: 12 },
+  { re: /express\s*\(|require\(['"]express['"]\)|from ['"]express['"]/, score: 35 },
+  { re: /fastify\s*\(|from ['"]fastify['"]/, score: 35 },
+  { re: /NestFactory\.create|from ['"]@nestjs\//, score: 42 },
+  { re: /new Hono\s*\(|from ['"]hono['"]/, score: 28 },
+  { re: /FastAPI\s*\(|from fastapi import/i, score: 42 },
+  { re: /Flask\s*\(|from flask import/i, score: 32 },
+  { re: /@SpringBootApplication|SpringApplication\.run/, score: 48 },
+  { re: /@RestController|@Controller|@RequestMapping|@GetMapping|@PostMapping/, score: 36 },
+  { re: /\b(class|function|const)\s+\w*(Controller|Service|Handler|Route)\b/, score: 22 },
+  { re: /gin\.Default\(\)|gin\.New\(\)/, score: 38 },
+  { re: /echo\.New\(\)/, score: 34 },
+  { re: /axum::Router|Router::new\(\)/, score: 38 },
+  { re: /tokio::main|actix_web::main/, score: 28 },
+  { re: /commander|yargs|cobra\.Command|clap::Parser|argparse\.ArgumentParser/, score: 28 },
+];
+
+const LOW_PRIORITY_PATH_RULES = [
+  // 예제/문서/테스트 파일은 핵심 코드처럼 보여도 선순위에서 밀어낸다.
+  { re: /(^|\/)(examples?|bench(marks?)?|playground|demo|demos|samples?)\//, penalty: 120 },
+  { re: /(^|\/)docs?\//, penalty: 80 },
+  { re: /(^|\/)(tests?|__tests__|spec|mocks?|fixtures?)\//, penalty: 150 },
+  { re: /\.(test|spec|stories)\.[jt]sx?$/, penalty: 150 },
+  { re: /(^|\/)(README|CHANGELOG|LICENSE|CONTRIBUTING)\.md$/i, penalty: 35 },
+];
+
+function importBoost(importInfo = {}) {
+  // 여러 파일에서 참조되는 파일일수록 핵심 로직/공유 모듈일 가능성이 높다.
+  const {
+    importCount = 0,
+    importerCount = importCount,
+    importDepth = 0,
+  } = importInfo;
+
+  if (importerCount >= 8) return 52;
+  if (importerCount >= 5) return 42;
+  if (importerCount >= 3) return 32;
+  if (importerCount === 2) return 22;
+  if (importerCount === 1) return importDepth >= 3 ? 18 : 12;
+
+  // 한 파일에서 반복적으로 참조되는 경우도 약한 신호로 반영한다.
+  if (importCount >= 3) return 10;
+  return 0;
+}
+
+function depthPenalty(depth, isImportant) {
+  // 핵심 파일은 monorepo/deep folder 구조에서도 depth 감점을 최소화한다.
+  if (depth <= 1) return 0;
+  return isImportant
+    ? Math.min(Math.max(depth - 2, 0), 4)
+    : Math.min(depth * 2, 14);
+}
+
+function calcScore(filePath, profile, content = '', importInfo = {}) {
   const normalized = filePath.replace(/\\/g, '/');
   const filename   = normalized.split('/').pop();
   const depth      = normalized.split('/').length - 1;
+  const {
+    importCount = 0,
+    importerCount = importCount,
+  } = importInfo;
 
   let score = 20;
+  let importance = 0;
+
+  // 기존 absolute priority 규칙은 유지하고, 이후 세부 신호를 더한다.
   for (const rule of COMMON_RULES) {
     if (rule.re.test(filename) || rule.re.test(normalized)) {
       score = Math.max(score, rule.score);
+      importance += Math.ceil(rule.score / 25);
     }
   }
   for (const rule of (PROFILE_RULES[profile] || [])) {
     if (rule.re.test(normalized)) {
       score = Math.max(score, rule.score);
+      importance += Math.ceil(rule.score / 30);
     }
   }
-  score -= Math.min(depth * 3, 15);
+
+  for (const rule of KEY_FILENAME_RULES) {
+    if (rule.re.test(filename)) {
+      score += rule.score;
+      importance += 2;
+    }
+  }
+
+  for (const rule of KEY_PATH_RULES) {
+    if (rule.re.test(normalized)) {
+      score += rule.score;
+      importance += 1;
+    }
+  }
+
+  for (const rule of FRAMEWORK_ENTRY_RULES) {
+    if (rule.re.test(normalized)) {
+      score += rule.score;
+      importance += 2;
+    }
+  }
+
+  const sample = (content || '').slice(0, 8_000);
+  for (const rule of FILE_CONTENT_RULES) {
+    if (rule.re.test(sample)) {
+      score += rule.score;
+      importance += 2;
+    }
+  }
+
+  const importScore = importBoost({ ...importInfo, importDepth: depth });
+  score += importScore;
+  if (importerCount >= 3) importance += 3;
+  else if (importerCount > 0) importance += 2;
+  else if (importCount > 0) importance += 1;
+
+  for (const rule of LOW_PRIORITY_PATH_RULES) {
+    if (rule.re.test(normalized)) {
+      score -= rule.penalty;
+      importance = Math.max(0, importance - 2);
+    }
+  }
+
+  score -= depthPenalty(depth, importance >= 3);
   return Math.max(0, score);
 }
 
-// ═══════════════════════════════════════════════════════
 // detectProfile — score 기반 heuristic
-// ═══════════════════════════════════════════════════════
 
 /**
  * 경로 신호 점수표
@@ -376,21 +523,52 @@ function detectProfile(paths, fileMap) {
   return (best[1] > 0) ? best[0] : 'unknown';
 }
 
-// ═══════════════════════════════════════════════════════
 // monorepo 감지
-// ═══════════════════════════════════════════════════════
 
-/**
- * monorepo 하위 프로젝트 루트 디렉토리 패턴
- */
-const MONOREPO_ROOT_PATTERNS = [
-  /^(apps|packages|services|crates|server|client|frontend|backend)\/([^/]+)\//,
+const ROOT_SIGNAL_FILES = new Map([
+  ['package.json', 40],
+  ['pyproject.toml', 40],
+  ['pom.xml', 40],
+  ['build.gradle', 38],
+  ['build.gradle.kts', 38],
+  ['Cargo.toml', 40],
+  ['go.mod', 40],
+  ['requirements.txt', 28],
+  ['tsconfig.json', 16],
+  ['nest-cli.json', 22],
+]);
+
+const ROOT_SIGNAL_PATTERNS = [
+  { re: /(^|\/)(next|vite)\.config\.[cm]?[jt]sx?$/, score: 24 },
 ];
 
-const MANIFEST_FILES = new Set([
-  'package.json', 'pyproject.toml', 'Cargo.toml',
-  'go.mod', 'pom.xml', 'build.gradle', 'build.gradle.kts',
-]);
+const STRUCTURAL_ROOT_RE = /^(apps|packages|services|crates|modules|libs|examples)\/([^/]+)/;
+
+const ROOT_TYPE_SIGNALS = {
+  frontend: [
+    { re: /(^|\/)(page|layout)\.(js|jsx|ts|tsx)$/, score: 18 },
+    { re: /(^|\/)(next|vite)\.config\.[cm]?[jt]sx?$/, score: 20 },
+    { re: /from ['"]react['"]|import React|from ['"]next\//, score: 14, content: true },
+  ],
+  backend: [
+    { re: /(^|\/)(controllers?|handlers?|routes?)\//i, score: 18 },
+    { re: /(^|\/)services?\//i, score: 14 },
+    { re: /(controller|service|handler|route)\.(js|jsx|ts|tsx|java|kt|py|go|rs)$/i, score: 16 },
+    { re: /(^|\/).*Application\.java$/, score: 18 },
+    { re: /express\s*\(|from ['"]express['"]|require\(['"]express['"]\)|fastify\s*\(|from ['"]fastify['"]|NestFactory\.create|@SpringBootApplication|FastAPI\s*\(|from fastapi import/i, score: 20, content: true },
+  ],
+  cli: [
+    { re: /(^|\/)(cmd|commands?|bin)\//, score: 18 },
+    { re: /(^|\/)main\.(go|rs)$/, score: 16 },
+    { re: /argparse\.ArgumentParser|commander|yargs|cobra\.Command|clap::Parser/, score: 18, content: true },
+  ],
+  library: [
+    { re: /(^|\/)src\/index\.(js|jsx|ts|tsx|mjs|cjs)$/, score: 18 },
+    { re: /(^|\/)(lib|shared|packages?)\//, score: 12 },
+    { re: /"exports"\s*:|"main"\s*:|"types"\s*:/, score: 16, content: true },
+    { re: /export\s+\{|\bexport\s+(function|class|const|interface|type)\b/, score: 10, content: true },
+  ],
+};
 
 /**
  * @typedef {Object} SubProject
@@ -398,73 +576,224 @@ const MANIFEST_FILES = new Set([
  * @property {string}  manifest  - manifest 파일명
  * @property {number}  depth     - 루트 깊이 (낮을수록 우선)
  * @property {boolean} isRoot    - 저장소 루트 여부
+ * @property {number}  score
+ * @property {string}  projectType
+ * @property {number}  confidence
  */
 
 /**
  * 파일 경로 목록에서 monorepo 구조를 감지하고 하위 프로젝트 목록 반환
  *
  * @param {string[]} paths
- * @returns {{ isMonorepo: boolean, subProjects: SubProject[], primaryRoot: string }}
+ * @param {Map<string,string>|Record<string,string>} [files]
+ * @returns {{ isMonorepo: boolean, subProjects: SubProject[], primaryRoot: string, selectedRoots: string[], candidates: SubProject[] }}
  */
-export function detectMonorepo(paths) {
-  const subProjectMap = new Map(); // root → SubProject
+export function detectMonorepo(paths, files = new Map()) {
+  const fileMap = files instanceof Map ? files : new Map(Object.entries(files));
+  const normalizedPaths = paths.map(p => p.replace(/\\/g, '/'));
+  const candidateMap = new Map();
 
-  // 루트 manifest 확인
-  const rootManifests = [...MANIFEST_FILES].filter(m => paths.includes(m));
-  if (rootManifests.length > 0) {
-    subProjectMap.set('.', {
-      root:     '.',
-      manifest: rootManifests[0],
-      depth:    0,
-      isRoot:   true,
-    });
+  const ensureCandidate = (root) => {
+    const normalized = root || '.';
+    if (!candidateMap.has(normalized)) {
+      candidateMap.set(normalized, {
+        root: normalized,
+        manifest: null,
+        depth: normalized === '.' ? 0 : normalized.split('/').length,
+        isRoot: normalized === '.',
+        baseScore: 0,
+        typeScores: { frontend: 0, backend: 0, cli: 0, library: 0 },
+        signalCount: 0,
+      });
+    }
+    return candidateMap.get(normalized);
+  };
+
+  const nearestCandidateRoot = (filePath) => {
+    const matches = [...candidateMap.keys()]
+      .filter(root => root === '.' || filePath === root || filePath.startsWith(root + '/'))
+      .sort((a, b) => b.length - a.length);
+    return matches[0] || inferStructuralRoot(filePath);
+  };
+
+  const addTypeSignal = (root, type, score) => {
+    const candidate = ensureCandidate(root);
+    candidate.typeScores[type] += score;
+    candidate.signalCount += 1;
+  };
+
+  // 1) 실제 root marker 파일을 기반으로 후보를 만든다.
+  for (const filePath of normalizedPaths) {
+    const filename = filePath.split('/').pop();
+    const root = dirname(filePath) || '.';
+
+    if (ROOT_SIGNAL_FILES.has(filename)) {
+      const candidate = ensureCandidate(root);
+      candidate.baseScore += ROOT_SIGNAL_FILES.get(filename);
+      candidate.manifest ||= filename;
+      candidate.signalCount += 1;
+    }
+
+    for (const rule of ROOT_SIGNAL_PATTERNS) {
+      if (rule.re.test(filePath)) {
+        const candidate = ensureCandidate(root);
+        candidate.baseScore += rule.score;
+        candidate.manifest ||= filename;
+        candidate.signalCount += 1;
+      }
+    }
+
+    const structuralRoot = inferStructuralRoot(filePath);
+    if (structuralRoot !== '.' && structuralRoot !== root) {
+      ensureCandidate(structuralRoot);
+    }
   }
 
-  // monorepo 하위 경로 탐색
-  for (const filePath of paths) {
-    const filename = filePath.split('/').pop();
-    if (!MANIFEST_FILES.has(filename)) continue;
+  // 2) root 후보 주변의 파일명/경로/내용 신호를 균형 있게 더한다.
+  for (const filePath of normalizedPaths) {
+    const root = nearestCandidateRoot(filePath);
+    const content = String(fileMap.get(filePath) || '').slice(0, 8_000);
 
-    for (const pattern of MONOREPO_ROOT_PATTERNS) {
-      const m = filePath.match(pattern);
-      if (m) {
-        const root = `${m[1]}/${m[2]}`;
-        if (!subProjectMap.has(root)) {
-          subProjectMap.set(root, {
-            root,
-            manifest: filename,
-            depth:    root.split('/').length,
-            isRoot:   false,
-          });
+    for (const [type, rules] of Object.entries(ROOT_TYPE_SIGNALS)) {
+      for (const rule of rules) {
+        if (rule.content) {
+          if (content && rule.re.test(content)) addTypeSignal(root, type, rule.score);
+        } else if (rule.re.test(filePath)) {
+          addTypeSignal(root, type, rule.score);
         }
-        break;
       }
     }
   }
 
-  const subProjects = [...subProjectMap.values()]
-    .sort((a, b) => a.depth - b.depth);
+  const candidates = [...candidateMap.values()]
+    .map(candidate => {
+      const typeEntries = Object.entries(candidate.typeScores)
+        .sort((a, b) => b[1] - a[1] || a[0].localeCompare(b[0]));
+      const [projectType, typeScore] = typeEntries[0];
+      const secondScore = typeEntries[1]?.[1] || 0;
+      const score = candidate.baseScore + typeScore + Math.floor(secondScore * 0.25);
+      const confidence = score > 0
+        ? Number(Math.min(0.99, (typeScore + candidate.baseScore) / (score + 24)).toFixed(2))
+        : 0;
 
-  const isMonorepo = subProjects.some(p => !p.isRoot) && subProjects.length > 1;
+      return {
+        root: candidate.root,
+        manifest: candidate.manifest,
+        depth: candidate.depth,
+        isRoot: candidate.isRoot,
+        score,
+        projectType: typeScore > 0 ? projectType : 'unknown',
+        confidence,
+      };
+    })
+    .filter(candidate => candidate.score > 0)
+    .sort((a, b) => b.score - a.score || b.confidence - a.confidence || a.depth - b.depth || a.root.localeCompare(b.root));
 
-  // primaryRoot 우선순위:
-  //   1) 루트에 manifest 있으면 루트 우선
-  //   2) apps/web > apps/api > packages/* 순
-  //   3) depth 낮은 것 우선
-  const priority = (sp) => {
-    if (sp.isRoot) return 0;
-    if (/^apps\/(web|frontend|client)/.test(sp.root)) return 1;
-    if (/^apps\/(api|backend|server)/.test(sp.root)) return 2;
-    return sp.depth + 10;
+  const topScore = candidates[0]?.score || 0;
+  const selectedRoots = candidates
+    .filter(candidate => candidate.score >= Math.max(topScore - 28, topScore * 0.77))
+    .slice(0, 3)
+    .map(candidate => candidate.root);
+
+  const primaryRoot = candidates[0]?.root || '.';
+  const isMonorepo = candidates.some(p => !p.isRoot) && candidates.length > 1;
+
+  return {
+    isMonorepo,
+    subProjects: candidates,
+    primaryRoot,
+    selectedRoots: selectedRoots.length ? selectedRoots : [primaryRoot],
+    candidates,
   };
-  const primaryRoot = subProjects.sort((a, b) => priority(a) - priority(b))[0]?.root || '.';
-
-  return { isMonorepo, subProjects, primaryRoot };
 }
 
-// ═══════════════════════════════════════════════════════
+function inferStructuralRoot(filePath) {
+  const match = filePath.match(STRUCTURAL_ROOT_RE);
+  return match ? `${match[1]}/${match[2]}` : '.';
+}
+
+// import graph 기반 중요도
+
+const IMPORT_RE = /(?:import|export)\s+(?:[^'"]*?\s+from\s+)?['"]([^'"]+)['"]|require\(\s*['"]([^'"]+)['"]\s*\)/g;
+const RESOLVE_EXTS = [
+  '', '.ts', '.tsx', '.js', '.jsx', '.mjs', '.cjs',
+  '.py', '.go', '.rs', '.java', '.json',
+];
+
+function dirname(path) {
+  const idx = path.lastIndexOf('/');
+  return idx === -1 ? '' : path.slice(0, idx);
+}
+
+function normalizeRelativePath(path) {
+  const parts = [];
+  for (const part of path.split('/')) {
+    if (!part || part === '.') continue;
+    if (part === '..') parts.pop();
+    else parts.push(part);
+  }
+  return parts.join('/');
+}
+
+function resolveImportPath(importerPath, specifier, pathSet) {
+  if (!specifier.startsWith('.')) return null;
+
+  
+  const baseDir = dirname(importerPath);
+  const base = normalizeRelativePath(`${baseDir}/${specifier}`);
+  const candidates = [];
+
+  for (const ext of RESOLVE_EXTS) {
+    candidates.push(base + ext);
+  }
+  for (const ext of RESOLVE_EXTS.filter(Boolean)) {
+    candidates.push(`${base}/index${ext}`);
+  }
+  candidates.push(`${base}/mod.rs`, `${base}/__init__.py`);
+
+  return candidates.find(candidate => pathSet.has(candidate)) || null;
+}
+
+function buildImportGraph(fileMap) {
+  // 각 파일이 repo 내부에서 몇 번, 어떤 파일들에 의해 import/re-export 되는지 계산한다.
+  const paths = [...fileMap.keys()].map(path => path.replace(/\\/g, '/'));
+  const pathSet = new Set(paths);
+  const imports = new Map(paths.map(path => [path, new Set()]));
+  const importedBy = new Map(paths.map(path => [path, new Set()]));
+  const counts = new Map(paths.map(path => [path, 0]));
+
+  for (const [rawPath, content] of fileMap) {
+    const importerPath = rawPath.replace(/\\/g, '/');
+    const text = String(content || '').slice(0, 20_000);
+    IMPORT_RE.lastIndex = 0;
+
+    for (const match of text.matchAll(IMPORT_RE)) {
+      const specifier = match[1] || match[2];
+      const resolved = resolveImportPath(importerPath, specifier, pathSet);
+      if (!resolved || resolved === importerPath) continue;
+      imports.get(importerPath)?.add(resolved);
+      importedBy.get(resolved)?.add(importerPath);
+      counts.set(resolved, (counts.get(resolved) || 0) + 1);
+    }
+  }
+
+  return {
+    getInfo(path) {
+      const normalized = path.replace(/\\/g, '/');
+      const importers = [...(importedBy.get(normalized) || [])].sort();
+      const dependencies = [...(imports.get(normalized) || [])].sort();
+
+      return {
+        importCount: counts.get(normalized) || 0,
+        importerCount: importers.length,
+        importedBy: importers,
+        imports: dependencies,
+      };
+    },
+  };
+}
+
 // selectFilesForLLM
-// ═══════════════════════════════════════════════════════
 
 /**
  * @typedef {Object} ScoredFile
@@ -472,6 +801,9 @@ export function detectMonorepo(paths) {
  * @property {string}  content
  * @property {number}  score
  * @property {Profile} profile
+ * @property {number}  importCount
+ * @property {number}  importerCount
+ * @property {string[]} importedBy
  */
 
 /**
@@ -490,43 +822,59 @@ export function selectFilesForLLM(files, options = {}) {
   const fileMap  = files instanceof Map ? files : new Map(Object.entries(files));
   const allPaths = [...fileMap.keys()];
 
-  // monorepo 감지 → primaryRoot 기반 필터 옵션
-  const monorepo = detectMonorepo(allPaths);
+  // monorepo 감지 → ranking 기반으로 하나 이상의 대표 root를 선택한다.
+  const monorepo = detectMonorepo(allPaths, fileMap);
+  const selectedRoots = monorepo.selectedRoots || [monorepo.primaryRoot || '.'];
 
-  // content도 넘겨서 정확한 profile 감지
-  const profile = options.profile || detectProfile(allPaths, fileMap);
-
- const candidates = allPaths
-  .filter(p => {
+  const isSelectableScope = (p) => {
     // monorepo 아니면 전체 허용
-    if (monorepo.primaryRoot === '.') return true;
+    if (selectedRoots.includes('.')) return true;
 
-    // primaryRoot 내부 파일 허용
-    const isPrimaryProject =
-      p.startsWith(monorepo.primaryRoot + '/');
+    // 선택된 root 내부 파일과 루트 메타 파일만 선택 후보로 둔다.
+    const isSelectedProject = selectedRoots.some(root => p.startsWith(root + '/'));
 
-    // 루트 파일(package.json, README.md 등) 허용
     const isRootFile = !p.includes('/');
 
-    return isPrimaryProject || isRootFile;
-  })
-  .filter(p => passExtFilter(p))
-  .filter(p => passBlacklist(p));
+    return isSelectedProject || isRootFile;
+  };
 
-  const scored = candidates.map(path => ({
-    path,
-    content: fileMap.get(path),
-    score:   calcScore(path, profile),
-    profile,
-  })).sort((a, b) => b.score - a.score);
+  const profileEntries = selectedRoots.includes('.')
+    ? [...fileMap.entries()]
+    : [...fileMap.entries()].filter(([p]) => selectedRoots.some(root => p.startsWith(root + '/')));
+  const profileFileMap = new Map(profileEntries.length ? profileEntries : [...fileMap.entries()].filter(([p]) => isSelectableScope(p)));
+  const profilePaths = [...profileFileMap.keys()];
 
-  const estimateTokens = text => Math.ceil((text || '').length / 4);
+  // content도 넘겨서 정확한 profile 감지
+  const profile = options.profile || detectProfile(profilePaths, profileFileMap);
+
+  const candidates = allPaths
+    .filter(p => isSelectableScope(p))
+    .filter(p => passExtFilter(p))
+    .filter(p => passBlacklist(p));
+
+  const importGraph = buildImportGraph(fileMap);
+
+  const scored = candidates.map(path => {
+    const importInfo = importGraph.getInfo(path);
+    return {
+      path,
+      content: fileMap.get(path),
+      score:   calcScore(path, profile, fileMap.get(path), importInfo),
+      profile,
+      importCount: importInfo.importCount,
+      importerCount: importInfo.importerCount,
+      importedBy: importInfo.importedBy,
+    };
+  }).sort((a, b) => b.score - a.score || b.importerCount - a.importerCount || a.path.localeCompare(b.path));
+
+  const estimateTokens = (text, path = '') =>
+    Math.ceil((truncateForContext(text).length + path.length + 16) / 4);
   let totalTokens = 0;
   const selected  = [];
 
   for (const f of scored) {
     if (selected.length >= maxFiles) break;
-    const tokens = estimateTokens(f.content);
+    const tokens = estimateTokens(f.content, f.path);
     if (totalTokens + tokens > maxTotalTokens) continue;
     selected.push(f);
     totalTokens += tokens;
@@ -541,18 +889,13 @@ export function selectFilesForLLM(files, options = {}) {
  * @returns {string}
  */
 export function buildLLMContext(result) {
-  const MAX_FILE_CHARS = 8_000;
   const blocks = result.files.map(f => {
     const ext = f.path.split('.').pop() || '';
+    const content = truncateForContext(f.content);
+    const fence = markdownFenceFor(content);
 
-    const content =
-      (f.content || '').length > MAX_FILE_CHARS
-        ? f.content.slice(0, MAX_FILE_CHARS) +
-          '\n// [TRUNCATED]'
-        : f.content;
-
-    return `### ${f.path}\n\`\`\`${ext}\n${content}\n\`\`\``;
-});
+    return `### ${f.path}\n${fence}${ext}\n${content}\n${fence}`;
+  });
   return [
     `Project profile: ${result.profile}`,
     `Selected ${result.files.length} files for analysis:`,
@@ -561,9 +904,7 @@ export function buildLLMContext(result) {
   ].join('\n');
 }
 
-// ═══════════════════════════════════════════════════════
 // README 모델 입력 생성
-// ═══════════════════════════════════════════════════════
 
 function parsePackageMetadata(files) {
   const fileMap = files instanceof Map ? files : new Map(Object.entries(files));
@@ -619,9 +960,7 @@ export function buildReadmeModelInput(files, metadata = {}, options = {}) {
 }
 
 
-// ═══════════════════════════════════════════════════════
 // selectFiles — README 생성용 대표 파일 선별 (API 유지)
-// ═══════════════════════════════════════════════════════
 
 export function selectFiles(files) {
   const fileMap = files instanceof Map
@@ -643,9 +982,7 @@ export function selectFiles(files) {
   return { selected, packageManager };
 }
 
-// ═══════════════════════════════════════════════════════
 // summarizeSelected (API 유지)
-// ═══════════════════════════════════════════════════════
 
 export function summarizeSelected(selected) {
   const lines = ['[파일 선별 결과]'];
