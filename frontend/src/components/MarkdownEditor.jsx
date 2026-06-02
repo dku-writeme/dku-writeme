@@ -1,4 +1,7 @@
-import { useRef, useState } from 'react'
+import CodeMirror from '@uiw/react-codemirror'
+import { autocompletion, completeFromList } from '@codemirror/autocomplete'
+import { markdown as markdownLanguage } from '@codemirror/lang-markdown'
+import { useMemo, useRef, useState } from 'react'
 import {
   BoldIcon,
   CodeIcon,
@@ -64,65 +67,121 @@ npm run dev
   },
 ]
 
-// 생성된 README markdown을 textarea에서 직접 수정하는 컴포넌트
+const MARKDOWN_COMPLETIONS = [
+  {
+    label: 'README overview',
+    detail: '프로젝트 소개 섹션',
+    type: 'section',
+    apply: '## 프로젝트 소개\n\n이 프로젝트의 목적과 핵심 가치를 설명합니다.\n',
+  },
+  {
+    label: 'Installation',
+    detail: '설치 방법',
+    type: 'section',
+    apply: '## 설치 방법\n\n```bash\nnpm install\nnpm run dev\n```\n',
+  },
+  {
+    label: 'Usage',
+    detail: '사용 방법',
+    type: 'section',
+    apply: '## 사용 방법\n\n1. 저장소를 클론합니다.\n2. 의존성을 설치합니다.\n3. 개발 서버를 실행합니다.\n',
+  },
+  {
+    label: 'Features',
+    detail: '주요 기능',
+    type: 'section',
+    apply: '## 주요 기능\n\n- 기능 1\n- 기능 2\n- 기능 3\n',
+  },
+  {
+    label: 'Tech stack',
+    detail: '기술 스택 표',
+    type: 'section',
+    apply: '## 기술 스택\n\n| 구분 | 기술 |\n| --- | --- |\n| Frontend | React |\n| Backend | Node.js |\n',
+  },
+  {
+    label: 'Code block',
+    detail: 'bash 코드 블록',
+    type: 'snippet',
+    apply: '```bash\nnpm run dev\n```\n',
+  },
+  {
+    label: 'Task list',
+    detail: '체크박스 목록',
+    type: 'snippet',
+    apply: '- [ ] 할 일\n- [x] 완료한 일\n',
+  },
+  {
+    label: 'Link',
+    detail: '마크다운 링크',
+    type: 'snippet',
+    apply: '[링크 텍스트](https://example.com)',
+  },
+  {
+    label: 'Image',
+    detail: '마크다운 이미지',
+    type: 'snippet',
+    apply: '![이미지 설명](./path/to/image.png)',
+  },
+]
+
+// 생성된 README markdown을 전문 에디터에서 직접 수정하는 컴포넌트
 function MarkdownEditor({ markdown, lineCount, onChange }) {
-  const textareaRef = useRef(null)
+  const editorViewRef = useRef(null)
   const [headingMenuOpen, setHeadingMenuOpen] = useState(false)
-
-  const updateMarkdown = (nextMarkdown, nextSelectionStart, nextSelectionEnd) => {
-    onChange(nextMarkdown)
-
-    requestAnimationFrame(() => {
-      const textarea = textareaRef.current
-
-      if (!textarea) {
-        return
-      }
-
-      textarea.focus()
-      textarea.setSelectionRange(nextSelectionStart, nextSelectionEnd)
-    })
-  }
+  const editorExtensions = useMemo(
+    () => [
+      markdownLanguage(),
+      autocompletion({
+        activateOnTyping: true,
+        override: [completeFromList(MARKDOWN_COMPLETIONS)],
+      }),
+    ],
+    []
+  )
 
   const replaceSelection = (replacement, selectStartOffset = 0, selectEndOffset = replacement.length) => {
-    const textarea = textareaRef.current
+    const editorView = editorViewRef.current
 
-    if (!textarea) {
+    if (!editorView) {
       return
     }
 
-    const { selectionStart, selectionEnd } = textarea
-    const nextMarkdown =
-      markdown.slice(0, selectionStart) + replacement + markdown.slice(selectionEnd)
-    const nextSelectionStart = selectionStart + selectStartOffset
-    const nextSelectionEnd = selectionStart + selectEndOffset
+    const { from, to } = editorView.state.selection.main
 
-    updateMarkdown(nextMarkdown, nextSelectionStart, nextSelectionEnd)
+    editorView.dispatch({
+      changes: { from, to, insert: replacement },
+      selection: {
+        anchor: from + selectStartOffset,
+        head: from + selectEndOffset,
+      },
+      scrollIntoView: true,
+    })
+    editorView.focus()
   }
 
   const wrapSelection = (prefix, suffix, fallback) => {
-    const textarea = textareaRef.current
+    const editorView = editorViewRef.current
 
-    if (!textarea) {
+    if (!editorView) {
       return
     }
 
-    const { selectionStart, selectionEnd } = textarea
-    const selectedText = markdown.slice(selectionStart, selectionEnd) || fallback
+    const { from, to } = editorView.state.selection.main
+    const selectedText = editorView.state.doc.sliceString(from, to) || fallback
     const replacement = `${prefix}${selectedText}${suffix}`
 
     replaceSelection(replacement, prefix.length, prefix.length + selectedText.length)
   }
 
   const prefixSelectedLines = (prefix, fallback, normalizeLine = (line) => line) => {
-    const textarea = textareaRef.current
+    const editorView = editorViewRef.current
 
-    if (!textarea) {
+    if (!editorView) {
       return
     }
 
-    const { selectionStart, selectionEnd } = textarea
-    const selectedText = markdown.slice(selectionStart, selectionEnd)
+    const { from, to } = editorView.state.selection.main
+    const selectedText = editorView.state.doc.sliceString(from, to)
     const sourceText = selectedText || fallback
     const replacement = sourceText
       .split('\n')
@@ -133,16 +192,18 @@ function MarkdownEditor({ markdown, lineCount, onChange }) {
   }
 
   const insertBlock = (block) => {
-    const textarea = textareaRef.current
+    const editorView = editorViewRef.current
 
-    if (!textarea) {
+    if (!editorView) {
       return
     }
 
-    const { selectionStart } = textarea
-    const previousCharacter = markdown[selectionStart - 1]
-    const nextCharacter = markdown[selectionStart]
-    const prefix = !markdown || previousCharacter === '\n' ? '' : '\n\n'
+    const { from } = editorView.state.selection.main
+    const currentMarkdown = editorView.state.doc.toString()
+    const previousCharacter = from > 0 ? editorView.state.doc.sliceString(from - 1, from) : ''
+    const nextCharacter =
+      from < editorView.state.doc.length ? editorView.state.doc.sliceString(from, from + 1) : ''
+    const prefix = !currentMarkdown || previousCharacter === '\n' ? '' : '\n\n'
     const suffix = !nextCharacter || nextCharacter === '\n' ? '' : '\n\n'
     const replacement = `${prefix}${block.trim()}\n${suffix}`
 
@@ -150,15 +211,15 @@ function MarkdownEditor({ markdown, lineCount, onChange }) {
   }
 
   const insertHeading = (level) => {
-    const textarea = textareaRef.current
+    const editorView = editorViewRef.current
 
-    if (!textarea) {
+    if (!editorView) {
       return
     }
 
-    const { selectionStart, selectionEnd } = textarea
-    const selectedText = markdown
-      .slice(selectionStart, selectionEnd)
+    const { from, to } = editorView.state.selection.main
+    const selectedText = editorView.state.doc
+      .sliceString(from, to)
       .replace(/^#{1,6}\s+/, '')
       .trim()
     const headingText = selectedText || `제목 ${level}`
@@ -170,14 +231,14 @@ function MarkdownEditor({ markdown, lineCount, onChange }) {
   }
 
   const handleCodeBlock = () => {
-    const textarea = textareaRef.current
+    const editorView = editorViewRef.current
 
-    if (!textarea) {
+    if (!editorView) {
       return
     }
 
-    const { selectionStart, selectionEnd } = textarea
-    const selectedText = markdown.slice(selectionStart, selectionEnd) || '코드를 입력하세요'
+    const { from, to } = editorView.state.selection.main
+    const selectedText = editorView.state.doc.sliceString(from, to) || '코드를 입력하세요'
     const replacement = `\`\`\`bash\n${selectedText}\n\`\`\``
 
     replaceSelection(replacement, 8, 8 + selectedText.length)
@@ -287,10 +348,25 @@ function MarkdownEditor({ markdown, lineCount, onChange }) {
           </select>
         </label>
       </div>
-      <textarea
-        ref={textareaRef}
+      <CodeMirror
+        className="markdown-code-editor"
         value={markdown}
-        onChange={(event) => onChange(event.target.value)}
+        basicSetup={{
+          autocompletion: false,
+          bracketMatching: true,
+          closeBrackets: true,
+          foldGutter: true,
+          highlightActiveLine: true,
+          highlightSelectionMatches: true,
+          lineNumbers: true,
+        }}
+        extensions={editorExtensions}
+        height="100%"
+        minHeight="520px"
+        onChange={(value) => onChange(value)}
+        onCreateEditor={(editorView) => {
+          editorViewRef.current = editorView
+        }}
         placeholder="생성된 README가 여기에 표시됩니다."
         aria-label="Markdown editor"
       />

@@ -1,4 +1,5 @@
 import ReactMarkdown from 'react-markdown'
+import remarkGfm from 'remark-gfm'
 
 // markdown 문자열을 실제 README 미리보기 형태로 렌더링하는 컴포넌트
 function MarkdownPreview({ markdown, lineCount }) {
@@ -13,7 +14,7 @@ function MarkdownPreview({ markdown, lineCount }) {
       </header>
       <div className="markdown-preview-content">
         {markdown ? (
-          <ReactMarkdown>{markdown}</ReactMarkdown>
+          <ReactMarkdown remarkPlugins={[remarkGfm]}>{markdown}</ReactMarkdown>
         ) : (
           <div className="preview-empty">
             <strong>아직 README가 없습니다.</strong>

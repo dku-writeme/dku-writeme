@@ -42,8 +42,7 @@ body {
 
 button,
 input,
-select,
-textarea {
+select {
   font: inherit;
 }
 
@@ -237,8 +236,7 @@ button {
   gap: 10px;
 }
 
-.url-form input,
-.markdown-editor textarea {
+.url-form input {
   width: 100%;
   border: 1px solid var(--line-strong);
   color: var(--ink);
@@ -256,8 +254,7 @@ button {
   color: #9aa69c;
 }
 
-.url-form input:focus,
-.markdown-editor textarea:focus {
+.url-form input:focus {
   border-color: var(--accent);
   outline: 4px solid rgba(0, 122, 255, 0.14);
 }
@@ -1133,19 +1130,84 @@ button {
   outline: 3px solid rgba(0, 122, 255, 0.14);
 }
 
-.markdown-editor textarea {
+.markdown-code-editor {
   flex: 1;
   min-height: 520px;
-  resize: none;
-  padding: 18px;
-  border: 0;
-  border-radius: 0;
   background: rgba(255, 255, 255, 0.78);
+  overflow: hidden;
+}
+
+.markdown-code-editor .cm-editor {
+  height: 100%;
+  min-height: 520px;
   color: #1d1d1f;
+  background: transparent;
   font-family:
     "SFMono-Regular", Consolas, "Liberation Mono", ui-monospace, monospace;
   font-size: 14px;
   line-height: 1.75;
+}
+
+.markdown-code-editor .cm-editor.cm-focused {
+  outline: 0;
+}
+
+.markdown-code-editor .cm-scroller {
+  min-height: 520px;
+  overflow: auto;
+  font-family:
+    "SFMono-Regular", Consolas, "Liberation Mono", ui-monospace, monospace;
+}
+
+.markdown-code-editor .cm-content {
+  padding: 18px 18px 18px 8px;
+  caret-color: var(--accent);
+}
+
+.markdown-code-editor .cm-line {
+  padding: 0 4px;
+}
+
+.markdown-code-editor .cm-gutters {
+  border-right: 1px solid var(--line);
+  color: #8e8e93;
+  background: rgba(245, 245, 247, 0.82);
+}
+
+.markdown-code-editor .cm-activeLine {
+  background: rgba(0, 122, 255, 0.06);
+}
+
+.markdown-code-editor .cm-activeLineGutter {
+  color: var(--accent-strong);
+  background: rgba(0, 122, 255, 0.08);
+}
+
+.markdown-code-editor .cm-selectionBackground,
+.markdown-code-editor .cm-focused .cm-selectionBackground,
+.markdown-code-editor .cm-content ::selection {
+  background: rgba(0, 122, 255, 0.22);
+}
+
+.markdown-code-editor .cm-placeholder {
+  color: #8e8e93;
+}
+
+.markdown-code-editor .cm-tooltip-autocomplete {
+  border: 1px solid rgba(60, 60, 67, 0.16);
+  border-radius: 8px;
+  overflow: hidden;
+  background: rgba(255, 255, 255, 0.96);
+  box-shadow: 0 14px 34px rgba(0, 0, 0, 0.14);
+}
+
+.markdown-code-editor .cm-tooltip-autocomplete ul {
+  font-family:
+    "SFMono-Regular", Consolas, "Liberation Mono", ui-monospace, monospace;
+}
+
+.markdown-code-editor .cm-tooltip-autocomplete ul li[aria-selected] {
+  background: var(--accent);
 }
 
 .markdown-preview {
@@ -1236,6 +1298,14 @@ button {
   border-collapse: collapse;
   border: 1px solid var(--line);
   border-radius: 8px;
+}
+
+.markdown-preview-content del {
+  color: var(--muted);
+}
+
+.markdown-preview-content input[type="checkbox"] {
+  margin-right: 8px;
 }
 
 .markdown-preview-content th,
@@ -1417,7 +1487,9 @@ button {
     min-height: 480px;
   }
 
-  .markdown-editor textarea,
+  .markdown-code-editor,
+  .markdown-code-editor .cm-editor,
+  .markdown-code-editor .cm-scroller,
   .markdown-preview-content {
     min-height: 440px;
   }
