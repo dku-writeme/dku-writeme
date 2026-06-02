@@ -66,26 +66,24 @@ async def analyze(req: AnalyzeRequest):
 
     # 질문 1. 프로젝트 설명 (description 없을 때만 AI 사용)
     if not req.description or req.description in ("None", ""):
+        print("💡 [INFO] description이 없거나 비어 있습니다. ➡️ AI 분석을 호출합니다.")
         prompt_desc = f"""아래는 GitHub 저장소의 파일 목록과 내용입니다.
-
         [데이터]
         {context}
-
         이 프로그램을 한 줄로 설명하시오.
         - 마크다운 없이 순수 텍스트 한 문장으로만 출력
         - 한국어만 사용"""
         description = call_ai(prompt_desc)
     else:
+        print(f"✅ [INFO] 기존 description이 존재합니다. AI를 사용하지 않고 기존 데이터를 유지합니다.")
+        print(f"   (기존 내용: {req.description[:30]}...)")
         description = req.description
 
     # 질문 2. 주요 기능 추출
     prompt_features = f"""아래는 GitHub 저장소의 파일 목록과 내용입니다.
-
     [데이터]
     {context}
-
     이 프로그램의 주요 기능을 2~5가지로 작성하시오.
-
     [출력 규칙 - 반드시 준수]
     - 형식: "- 기능명: 설명" 한 줄로만
     - 설명은 20자 이내로 간결하게
@@ -95,14 +93,30 @@ async def analyze(req: AnalyzeRequest):
     - 코드에서 확인된 것만, 추측 금지
     - 코드에 없는 기능은 절대 작성하지 말 것
     - 확인되지 않은 기능은 목록에서 제외할 것
-
+    - 사용자가 이 프로젝트로 "무엇을 할 수 있는지" 관점으로 작성
+    - 같은 성격의 기능은 하나로 묶되, 구체적인 예시를 괄호로 추가할 것
+    - 개발 도구(Webpack, Babel 등)는 기능이 아니므로 제외
+    - 프로젝트 전체를 다시 설명하는 항목 제외
     [좋은 예시]
     - 주식 가격 수집: 지정한 종목의 실시간 주가를 가져옵니다.
     - 조건 알림: 목표가 초과 시 자동으로 알림을 발송합니다.
-
+    - 미니게임 플레이: 구구단, 끝말잇기, 숫자야구 등 다양한 게임을 즐길 수 있습니다.
+    - 게임 소스코드 학습: 각 게임의 React 구현 코드를 직접 확인할 수 있습니다.
     [나쁜 예시 - 이렇게 하지 말 것]
-    - collector.py의 fetch_data 함수가 yfinance를 사용해서 주가 데이터를..."""
+    - collector.py의 fetch_data 함수가 yfinance를 사용해서 주가 데이터를...
+    - 리액트 웹 게임 개발: 여러 리액트를 기반으로 한 웹 게임을 개발합니다. (너무 포괄적)
+    - 구구단 게임: 구구단을 맞추는 게임입니다. (개별 나열)
+    - Webpack 환경 구축: Babel과 Webpack을 사용합니다. (개발 도구 언급)
+    """
     features = call_ai(prompt_features)
+    
+    print("\n" + "="*40)
+    print("🚀 [AI SERVER] analyze 함수 반환 값 확인")
+    print("="*40)
+    print(f"📝 Description:\n{description}")
+    print("-"*40)
+    print(f"⚡ Features:\n{features}")
+    print("="*40 + "\n")
 
     return {
         "description": description,
