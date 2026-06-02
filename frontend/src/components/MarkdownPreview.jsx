@@ -6,7 +6,7 @@ function MarkdownPreview({ markdown, lineCount }) {
     <section className="markdown-preview">
       <header className="panel-titlebar">
         <div>
-          <p>Rendered</p>
+          <p>README</p>
           <h2>미리보기</h2>
         </div>
         <span>{lineCount} lines</span>

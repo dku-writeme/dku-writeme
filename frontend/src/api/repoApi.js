@@ -544,6 +544,20 @@ const buildMarkdown = (repoInfo, options) => {
   ]) + '\n'
 }
 
+const parseStreamBuffer = (buffer, onEvent) => {
+  const lines = buffer.split('\n')
+  const remainingBuffer = lines.pop() || ''
+
+  lines
+    .map((line) => line.trim())
+    .filter(Boolean)
+    .forEach((line) => {
+      onEvent(JSON.parse(line))
+    })
+
+  return remainingBuffer
+}
+
 // owner, repo, options 값을 기반으로 README markdown 생성 요청 처리
 export async function requestReadme(owner, repo, options = DEFAULT_OPTIONS) {
   const readmeOptions = normalizeOptions(options)
@@ -570,6 +584,81 @@ export async function requestReadme(owner, repo, options = DEFAULT_OPTIONS) {
   } catch (error) {
     // App.jsx에서 alert로 보여줄 수 있도록 에러를 다시 던짐
     console.error('README 생성 오류: ', error)
+    throw error
+  }
+}
+
+// README 생성 진행 상태를 스트리밍으로 읽고, 완료 시 markdown과 repo 데이터를 반환
+export async function requestReadmeStream(
+  owner,
+  repo,
+  options = DEFAULT_OPTIONS,
+  handlers = {},
+  signal
+) {
+  const readmeOptions = normalizeOptions(options)
+  let buffer = ''
+  let completedResult = null
+
+  try {
+    const response = await fetch(buildApiUrl('/api/generate/stream'), {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ owner, repo }),
+      signal,
+    })
+
+    if (!response.ok) {
+      const errorInfo = await response.json().catch(() => ({}))
+      throw new Error(errorInfo.message || '서버 응답 에러')
+    }
+
+    if (!response.body) {
+      throw new Error('브라우저가 스트리밍 응답을 지원하지 않습니다.')
+    }
+
+    const reader = response.body.getReader()
+    const decoder = new TextDecoder()
+
+    const handleEvent = (event) => {
+      handlers.onEvent?.(event)
+
+      if (event.type === 'error') {
+        throw new Error(event.message || 'README 생성 중 오류가 발생했습니다.')
+      }
+
+      if (event.type === 'complete') {
+        completedResult = {
+          markdown: buildMarkdown(event.repo, readmeOptions),
+          repo: event.repo,
+        }
+      }
+    }
+
+    while (true) {
+      const { done, value } = await reader.read()
+
+      if (done) {
+        break
+      }
+
+      buffer = parseStreamBuffer(buffer + decoder.decode(value, { stream: true }), handleEvent)
+    }
+
+    const trailingText = buffer + decoder.decode()
+    if (trailingText.trim()) {
+      parseStreamBuffer(`${trailingText}\n`, handleEvent)
+    }
+
+    if (!completedResult) {
+      throw new Error('README 생성 완료 이벤트를 받지 못했습니다.')
+    }
+
+    return completedResult
+  } catch (error) {
+    if (error.name !== 'AbortError') {
+      console.error('README 스트리밍 생성 오류: ', error)
+    }
     throw error
   }
 }

@@ -45,6 +45,30 @@ function sendJson(response, statusCode, data) {
   response.end(JSON.stringify(data))
 }
 
+function startStream(response) {
+  response.writeHead(200, {
+    ...corsHeaders,
+    'Content-Type': 'application/x-ndjson; charset=utf-8',
+    'Cache-Control': 'no-cache',
+    Connection: 'keep-alive',
+  })
+}
+
+function writeStreamEvent(response, event) {
+  response.write(`${JSON.stringify(event)}\n`)
+}
+
+function createProgressEvent(step, status, message, detail = {}) {
+  return {
+    type: 'progress',
+    step,
+    status,
+    message,
+    detail,
+    timestamp: new Date().toISOString(),
+  }
+}
+
 // POST 요청 body를 읽어서 JSON 객체로 변환함
 async function readJsonBody(request) {
   let body = ''
@@ -247,58 +271,8 @@ async function handleGenerate(request, response) {
   }
 
   try {
-    const repoInfo = await deliverInfo(owner, repo)
-
-    if (!repoInfo) {
-      sendJson(response, 404, {
-        message: 'GitHub 저장소 정보를 가져오지 못했습니다.',
-      })
-      return
-    }
-
-    const files = await deliverFileTree(owner, repo, repoInfo.defaultBranch)
-    const selectedFiles = selectImportantFiles(files)
-    const selectedFileContents = await deliverFileContents(
-      owner,
-      repo,
-      repoInfo.defaultBranch,
-      selectedFiles,
-      {
-        maxFiles: 30,
-        maxContentSize: 100000,
-      }
-    )
-
-    const aiAnalysis = await analyzeRepositoryWithAi(repoInfo, selectedFileContents)
-
-    const analyzedRepoInfo = {
-      ...repoInfo,
-      description: aiAnalysis.description,
-    }
-
-    // README 생성에 바로 활용할 수 있도록 저장소 정보와 핵심 파일 분석 정보를 정리
-    const readmeData = organizeReadmeData(
-      analyzedRepoInfo,
-      files,
-      selectedFiles,
-      selectedFileContents
-    )
-    const analysisReport = createAiAnalysisReport(
-      aiAnalysis,
-      readmeData,
-      selectedFileContents
-    )
-
-    // 정상 조회된 저장소 정보, 파일 목록, 핵심 파일 내용, README 생성용 데이터를 반환
-    sendJson(response, 200, {
-      ...analyzedRepoInfo,
-      features: aiAnalysis.features,
-      files,
-      selectedFiles,
-      selectedFileContents,
-      readmeData,
-      analysisReport,
-    })
+    const generatedRepoInfo = await generateReadmePayload(owner, repo)
+    sendJson(response, 200, generatedRepoInfo)
   } catch (error) {
     if (error instanceof GithubApiError) {
       console.error('GitHub API 오류:', error.status, error.message)
@@ -314,6 +288,207 @@ async function handleGenerate(request, response) {
     sendJson(response, 500, {
       message: 'README 생성 중 오류가 발생했습니다.',
     })
+  }
+}
+
+async function generateReadmePayload(owner, repo, emitProgress = () => {}) {
+  emitProgress(createProgressEvent(
+    'repo-info',
+    'active',
+    'GitHub 저장소 기본 정보를 가져오는 중입니다.'
+  ))
+  const repoInfo = await deliverInfo(owner, repo)
+
+  if (!repoInfo) {
+    const error = new Error('GitHub 저장소 정보를 가져오지 못했습니다.')
+    error.status = 404
+    throw error
+  }
+
+  emitProgress(createProgressEvent(
+    'repo-info',
+    'complete',
+    `${repoInfo.fullName} 저장소 정보를 확인했습니다.`,
+    {
+      fullName: repoInfo.fullName,
+      defaultBranch: repoInfo.defaultBranch,
+    }
+  ))
+
+  emitProgress(createProgressEvent(
+    'file-tree',
+    'active',
+    '저장소 파일 트리를 분석하는 중입니다.'
+  ))
+  const files = await deliverFileTree(owner, repo, repoInfo.defaultBranch)
+  emitProgress(createProgressEvent(
+    'file-tree',
+    'complete',
+    `${files.length}개 파일 항목을 확인했습니다.`,
+    { totalFileCount: files.length }
+  ))
+
+  emitProgress(createProgressEvent(
+    'file-select',
+    'active',
+    'README 생성에 중요한 파일을 선별하는 중입니다.'
+  ))
+  const selectedFiles = selectImportantFiles(files)
+  emitProgress(createProgressEvent(
+    'file-select',
+    'complete',
+    `${selectedFiles.length}개 핵심 파일 후보를 선별했습니다.`,
+    { selectedFileCount: selectedFiles.length }
+  ))
+
+  emitProgress(createProgressEvent(
+    'file-content',
+    'active',
+    '핵심 파일 내용을 가져오는 중입니다.'
+  ))
+  const selectedFileContents = await deliverFileContents(
+    owner,
+    repo,
+    repoInfo.defaultBranch,
+    selectedFiles,
+    {
+      maxFiles: 30,
+      maxContentSize: 100000,
+    }
+  )
+  emitProgress(createProgressEvent(
+    'file-content',
+    'complete',
+    `${selectedFileContents.length}개 파일 내용을 읽었습니다.`,
+    { contentFileCount: selectedFileContents.length }
+  ))
+
+  emitProgress(createProgressEvent(
+    'ai-analysis',
+    'active',
+    'AI가 저장소 특징을 분석하는 중입니다.'
+  ))
+  const aiAnalysis = await analyzeRepositoryWithAi(repoInfo, selectedFileContents)
+  emitProgress(createProgressEvent(
+    'ai-analysis',
+    aiAnalysis.usedAi ? 'complete' : 'warning',
+    aiAnalysis.message,
+    {
+      status: aiAnalysis.status,
+      usedAi: aiAnalysis.usedAi,
+      fallbackUsed: aiAnalysis.fallbackUsed,
+      durationMs: aiAnalysis.durationMs,
+    }
+  ))
+
+  const analyzedRepoInfo = {
+    ...repoInfo,
+    description: aiAnalysis.description,
+  }
+
+  emitProgress(createProgressEvent(
+    'organize',
+    'active',
+    'README에 사용할 분석 데이터를 정리하는 중입니다.'
+  ))
+  const readmeData = organizeReadmeData(
+    analyzedRepoInfo,
+    files,
+    selectedFiles,
+    selectedFileContents
+  )
+  const analysisReport = createAiAnalysisReport(
+    aiAnalysis,
+    readmeData,
+    selectedFileContents
+  )
+  emitProgress(createProgressEvent(
+    'organize',
+    'complete',
+    'README 생성 데이터를 정리했습니다.',
+    {
+      totalTokens: analysisReport.totalTokens,
+      analyzedFileCount: analysisReport.analyzedFileCount,
+    }
+  ))
+
+  return {
+    ...analyzedRepoInfo,
+    features: aiAnalysis.features,
+    files,
+    selectedFiles,
+    selectedFileContents,
+    readmeData,
+    analysisReport,
+  }
+}
+
+async function handleGenerateStream(request, response) {
+  let payload
+
+  try {
+    payload = await readJsonBody(request)
+  } catch (error) {
+    sendJson(response, 400, { message: error.message })
+    return
+  }
+
+  const owner = String(payload.owner || '').trim()
+  const repo = String(payload.repo || '').trim()
+
+  if (!owner || !repo) {
+    sendJson(response, 400, {
+      message: 'owner와 repo를 모두 입력해주세요.',
+    })
+    return
+  }
+
+  startStream(response)
+
+  try {
+    writeStreamEvent(response, createProgressEvent(
+      'start',
+      'active',
+      'README 생성 작업을 시작했습니다.',
+      { owner, repo }
+    ))
+
+    const generatedRepoInfo = await generateReadmePayload(owner, repo, (event) => {
+      writeStreamEvent(response, event)
+    })
+
+    writeStreamEvent(response, {
+      type: 'complete',
+      step: 'complete',
+      status: 'complete',
+      message: 'README 생성이 완료되었습니다.',
+      repo: generatedRepoInfo,
+      timestamp: new Date().toISOString(),
+    })
+  } catch (error) {
+    if (error instanceof GithubApiError) {
+      console.error('GitHub API 오류:', error.status, error.message)
+      writeStreamEvent(response, {
+        type: 'error',
+        step: 'github',
+        status: 'error',
+        message: githubErrorMessage(error),
+        githubStatus: error.status,
+        githubMessage: error.message,
+        timestamp: new Date().toISOString(),
+      })
+    } else {
+      console.error('README 스트리밍 생성 중 오류가 발생했습니다:', error)
+      writeStreamEvent(response, {
+        type: 'error',
+        step: 'server',
+        status: 'error',
+        message: error.message || 'README 생성 중 오류가 발생했습니다.',
+        timestamp: new Date().toISOString(),
+      })
+    }
+  } finally {
+    response.end()
   }
 }
 
@@ -337,6 +512,12 @@ const server = http.createServer(async (request, response) => {
   if (request.method === 'POST' && url.pathname === '/api/generate') {
     // README 생성에 필요한 GitHub 저장소 정보 조회 API
     await handleGenerate(request, response)
+    return
+  }
+
+  if (request.method === 'POST' && url.pathname === '/api/generate/stream') {
+    // README 생성 진행 상태를 실시간 이벤트로 반환하는 API
+    await handleGenerateStream(request, response)
     return
   }
 

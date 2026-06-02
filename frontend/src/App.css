@@ -458,16 +458,101 @@ button {
   background: rgba(255, 255, 255, 0.94);
 }
 
+.action-buttons button:disabled {
+  border-color: var(--line);
+  color: #9a9aa0;
+  background: rgba(245, 245, 247, 0.72);
+  box-shadow: none;
+  cursor: not-allowed;
+}
+
+.generation-progress {
+  display: grid;
+  gap: 8px;
+  padding: 10px 12px;
+  border: 1px solid rgba(0, 122, 255, 0.18);
+  border-radius: 8px;
+  background: rgba(255, 255, 255, 0.78);
+  box-shadow: 0 8px 20px rgba(0, 122, 255, 0.045);
+}
+
+.generation-progress-main {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  min-width: 0;
+}
+
+.generation-progress-spinner {
+  width: 16px;
+  height: 16px;
+  flex: 0 0 16px;
+  border: 2px solid rgba(0, 122, 255, 0.22);
+  border-top-color: var(--accent);
+  border-radius: 999px;
+  animation: spin 0.85s linear infinite;
+}
+
+.generation-progress-copy {
+  display: flex;
+  min-width: 0;
+  flex: 1;
+  align-items: baseline;
+  gap: 8px;
+}
+
+.generation-progress-copy strong {
+  flex: 0 0 auto;
+  color: var(--ink);
+  font-size: 13px;
+  font-weight: 850;
+}
+
+.generation-progress-copy span {
+  min-width: 0;
+  color: var(--muted);
+  font-size: 13px;
+  font-weight: 700;
+  overflow-wrap: anywhere;
+}
+
+.generation-progress-percent {
+  flex: 0 0 auto;
+  color: var(--accent-strong);
+  font-size: 12px;
+  font-weight: 850;
+}
+
+.generation-progress-track {
+  height: 3px;
+  overflow: hidden;
+  border-radius: 999px;
+  background: rgba(0, 122, 255, 0.1);
+}
+
+.generation-progress-track span {
+  display: block;
+  height: 100%;
+  border-radius: inherit;
+  background: var(--accent);
+  transition: width 0.22s ease;
+}
+
 .analysis-report {
   display: grid;
-  gap: 14px;
-  padding: 16px;
+  gap: 12px;
+  padding: 10px 12px;
   border: 1px solid rgba(60, 60, 67, 0.14);
   border-radius: 8px;
+  background: rgba(255, 255, 255, 0.7);
+  box-shadow: 0 8px 20px rgba(0, 0, 0, 0.035);
+}
+
+.analysis-report-open {
+  padding: 16px;
   background:
     linear-gradient(180deg, rgba(255, 255, 255, 0.82), rgba(250, 250, 252, 0.72)),
     rgba(255, 255, 255, 0.78);
-  box-shadow: 0 8px 26px rgba(0, 0, 0, 0.045);
 }
 
 .analysis-report-success {
@@ -491,6 +576,10 @@ button {
   gap: 12px;
 }
 
+.analysis-report-compact .analysis-report-header {
+  grid-template-columns: 30px minmax(0, 1fr) auto;
+}
+
 .analysis-status-icon {
   display: grid;
   width: 38px;
@@ -500,6 +589,11 @@ button {
   border-radius: 8px;
   color: var(--accent-strong);
   background: rgba(0, 122, 255, 0.08);
+}
+
+.analysis-report-compact .analysis-status-icon {
+  width: 30px;
+  height: 30px;
 }
 
 .analysis-report-success .analysis-status-icon {
@@ -519,6 +613,11 @@ button {
 .analysis-status-icon svg {
   width: 19px;
   height: 19px;
+}
+
+.analysis-report-compact .analysis-status-icon svg {
+  width: 16px;
+  height: 16px;
 }
 
 .analysis-report-header h2 {
@@ -541,6 +640,42 @@ button {
   background: rgba(0, 122, 255, 0.08);
   font-size: 12px;
   font-weight: 850;
+}
+
+.analysis-compact-actions {
+  display: flex;
+  min-width: 0;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 10px;
+}
+
+.analysis-summary-text {
+  color: var(--muted);
+  font-size: 12px;
+  font-weight: 800;
+  overflow-wrap: anywhere;
+}
+
+.analysis-details-button {
+  display: inline-flex;
+  min-height: 32px;
+  flex: 0 0 auto;
+  align-items: center;
+  justify-content: center;
+  padding: 0 10px;
+  border: 1px solid var(--line-strong);
+  border-radius: 8px;
+  color: var(--ink);
+  background: rgba(255, 255, 255, 0.76);
+  cursor: pointer;
+  font-size: 12px;
+  font-weight: 850;
+}
+
+.analysis-details-button:hover {
+  border-color: var(--accent);
+  color: var(--accent-strong);
 }
 
 .analysis-report-failed .analysis-status-pill,
@@ -1236,6 +1371,25 @@ button {
   .analysis-report-header,
   .analysis-flow ol {
     grid-template-columns: 1fr;
+  }
+
+  .analysis-report-compact .analysis-report-header,
+  .generation-progress-main {
+    align-items: stretch;
+  }
+
+  .generation-progress-main,
+  .generation-progress-copy,
+  .analysis-compact-actions {
+    flex-direction: column;
+  }
+
+  .analysis-compact-actions {
+    align-items: stretch;
+  }
+
+  .analysis-details-button {
+    width: 100%;
   }
 
   .analysis-flow li + li::before {
