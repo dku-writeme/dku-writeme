@@ -251,11 +251,17 @@ function extractScripts(repoInfo, lang = 'en') {
 
 const formatFeatures = (repoInfo, lang = 'en') => {
   const features = repoInfo.features || repoInfo.readmeData?.analysis?.detectedFeatures
+  const normalizeFeatureItems = (featureItems) =>
+    featureItems
+      .flatMap((feature) =>
+        String(feature || '')
+          .split(/\r?\n/)
+          .map((line) => line.replace(/^-+\s*/, '').trim())
+      )
+      .filter(Boolean)
 
   if (Array.isArray(features) && features.length > 0) {
-    return features
-      .map((feature) => String(feature).trim())
-      .filter(Boolean)
+    return normalizeFeatureItems(features)
       .map((feature) => `- ${translate(feature.replace(/^-+\s*/, ''), lang)}`)
       .join('\n')
   }
@@ -277,7 +283,7 @@ const formatFeatures = (repoInfo, lang = 'en') => {
 }
 
 const formatTechStack = (repoInfo, lang = 'en') => {
-  const techStack = repoInfo.readmeData?.analysis?.techStack || []
+  const techStack = Array.from(new Set(repoInfo.readmeData?.analysis?.techStack || []))
 
   if (techStack.length > 0) {
     return techStack.map((item) => `- ${item}`).join('\n')
@@ -292,6 +298,22 @@ const formatLicense = (license, lang = 'en') => {
   }
 
   return TEXT[lang].licenseText(license)
+}
+
+const isMissingCommand = (command, lang = 'en') => {
+  if (!command) return true
+
+  return [
+    TEXT.en.noInstallCommand,
+    TEXT.en.noRunCommand,
+    TEXT.en.noBuildCommand,
+    TEXT.en.noTestCommand,
+    TEXT.ko.noInstallCommand,
+    TEXT.ko.noRunCommand,
+    TEXT.ko.noBuildCommand,
+    TEXT.ko.noTestCommand,
+    TEXT[lang].none,
+  ].some((missingText) => command === missingText)
 }
 
 // README 생성에 활용할 핵심 파일 목록을 markdown 리스트 형태로 변환
@@ -317,7 +339,7 @@ const formatScripts = (readmeData, lang = 'en') => {
       ['run', commands.run],
       ['build', commands.build],
       ['test', commands.test],
-    ].filter(([, command]) => command)
+    ].filter(([, command]) => !isMissingCommand(command, lang))
 
     if (commandEntries.length > 0) {
       return commandEntries
@@ -427,11 +449,15 @@ const buildRepositoryInfo = (repoInfo, lang) => {
   ].join('\n')
 }
 
-const buildInstallBlock = (scripts) => `\`\`\`bash\n${scripts.install}\n\`\`\``
-
-const buildUsageBlock = (scripts) => `\`\`\`bash\n${scripts.dev}\n\`\`\``
-
 const buildCommandBlock = (command) => `\`\`\`bash\n${command}\n\`\`\``
+
+const buildCommandSectionContent = (command, fallback, lang) => {
+  if (isMissingCommand(command, lang)) {
+    return fallback
+  }
+
+  return buildCommandBlock(command)
+}
 
 const buildProjectCommandBlock = (scripts) =>
   [
@@ -440,7 +466,7 @@ const buildProjectCommandBlock = (scripts) =>
     ['build', scripts.build],
     ['test', scripts.test],
   ]
-    .filter(([, command]) => command && !command.startsWith(TEXT.en.noInstallCommand) && !command.startsWith(TEXT.ko.noInstallCommand))
+    .filter(([, command]) => !isMissingCommand(command))
     .map(([name, command]) => `# ${name}\n${command}`)
     .join('\n\n')
 
@@ -463,10 +489,30 @@ const buildStandardSections = (repoInfo, lang, sections) => {
     sectionBlock(sections, 'repositoryInfo', text.repositoryInfo, buildRepositoryInfo(repoInfo, lang)),
     sectionBlock(sections, 'techStack', text.techStack, formatTechStack(repoInfo, lang)),
     sectionBlock(sections, 'installation', text.prerequisites, formatPrerequisites(repoInfo, lang)),
-    sectionBlock(sections, 'installation', text.installation, buildInstallBlock(scripts)),
-    sectionBlock(sections, 'usage', text.usage, buildUsageBlock(scripts)),
-    sectionBlock(sections, 'build', text.build, buildCommandBlock(scripts.build)),
-    sectionBlock(sections, 'test', text.test, buildCommandBlock(scripts.test)),
+    sectionBlock(
+      sections,
+      'installation',
+      text.installation,
+      buildCommandSectionContent(scripts.install, text.noInstallCommand, lang)
+    ),
+    sectionBlock(
+      sections,
+      'usage',
+      text.usage,
+      buildCommandSectionContent(scripts.dev, text.noRunCommand, lang)
+    ),
+    sectionBlock(
+      sections,
+      'build',
+      text.build,
+      buildCommandSectionContent(scripts.build, text.noBuildCommand, lang)
+    ),
+    sectionBlock(
+      sections,
+      'test',
+      text.test,
+      buildCommandSectionContent(scripts.test, text.noTestCommand, lang)
+    ),
     sectionBlock(sections, 'features', text.features, formatFeatures(repoInfo, lang)),
     sectionBlock(
       sections,

@@ -85,6 +85,69 @@ function normalizeAiFeatures(features) {
   return null
 }
 
+function splitFeatureItems(features) {
+  const featureItems = Array.isArray(features) ? features : [features]
+
+  return featureItems
+    .flatMap((feature) =>
+      String(feature || '')
+        .split(/\r?\n/)
+        .map((line) => line.replace(/^-+\s*/, '').trim())
+    )
+    .filter(Boolean)
+}
+
+function createAiAnalysisReport(aiAnalysis, readmeData, selectedFileContents) {
+  const analysis = readmeData.analysis || {}
+  const repositoryAnalysis = readmeData.repositoryAnalysis || {}
+  const rawDetectedFeatures = Array.isArray(aiAnalysis.features)
+    ? aiAnalysis.features
+    : aiAnalysis.features
+      ? [aiAnalysis.features]
+      : analysis.detectedFeatures || []
+  const detectedFeatures = splitFeatureItems(rawDetectedFeatures)
+  const techStack = analysis.techStack || []
+  const analyzedFiles = selectedFileContents.map((file) => {
+    const selectionFile = repositoryAnalysis.files?.find(
+      (selectedFile) => selectedFile.path === file.path
+    )
+
+    return {
+      path: file.path,
+      reason: file.reason,
+      priority: file.priority,
+      size: file.size,
+      score: selectionFile?.score ?? null,
+      profile: selectionFile?.profile || repositoryAnalysis.profile || null,
+    }
+  })
+
+  return {
+    status: aiAnalysis.status,
+    usedAi: aiAnalysis.usedAi,
+    fallbackUsed: aiAnalysis.fallbackUsed,
+    message: aiAnalysis.message,
+    durationMs: aiAnalysis.durationMs,
+    analyzedFileCount: analyzedFiles.length,
+    analyzedFiles,
+    selectedFileCount: readmeData.fileSummary?.selectedCount || 0,
+    totalFileCount: readmeData.fileSummary?.totalCount || 0,
+    contentFileCount: readmeData.fileSummary?.contentCount || 0,
+    repositoryProfile: analysis.repositoryProfile || null,
+    monorepo: Boolean(analysis.monorepo?.isMonorepo),
+    totalTokens: analysis.totalTokens || 0,
+    detectedItems: {
+      projectType: analysis.projectType || null,
+      primaryLanguage: analysis.primaryLanguage || null,
+      techStack,
+      buildTools: analysis.buildTools || [],
+      features: detectedFeatures,
+      commands: analysis.commands || {},
+      hasExistingReadme: Boolean(analysis.hasExistingReadme),
+    },
+  }
+}
+
 function githubErrorMessage(error) {
   if (error.status === 403) {
     const rateLimitRemaining = error.details?.rateLimitRemaining
@@ -106,6 +169,10 @@ function githubErrorMessage(error) {
 async function analyzeRepositoryWithAi(repoInfo, selectedFileContents) {
   let description = repoInfo.description
   let features = null
+  const startedAt = Date.now()
+  const fallbackMessage = 'AI 분석을 사용할 수 없어 Rule-based 분석 결과로 README를 구성했습니다.'
+  let status = 'fallback'
+  let message = fallbackMessage
 
   try {
     const aiResponse = await fetch(AI_ANALYSIS_URL, {
@@ -129,18 +196,34 @@ async function analyzeRepositoryWithAi(repoInfo, selectedFileContents) {
           ? aiResult.description.trim()
           : description
       features = normalizeAiFeatures(aiResult.features)
+      status = 'success'
+      message = 'AI 분석이 완료되었습니다.'
     } else {
       console.error('AI 서버 응답 오류:', aiResponse.status)
+      status = 'failed'
+      message = `AI 서버가 ${aiResponse.status} 응답을 반환해 Rule-based 분석으로 대체했습니다.`
     }
   } catch (error) {
     if (error.name === 'TimeoutError' || error.name === 'AbortError') {
       console.error(`AI 서버 호출 시간 초과: ${AI_ANALYSIS_TIMEOUT_MS}ms`)
+      status = 'timeout'
+      message = `AI 서버 호출이 ${AI_ANALYSIS_TIMEOUT_MS}ms 안에 완료되지 않아 Rule-based 분석으로 대체했습니다.`
     } else {
       console.error('AI 서버 호출 실패:', error.message)
+      status = 'failed'
+      message = fallbackMessage
     }
   }
 
-  return { description, features }
+  return {
+    description,
+    features,
+    status,
+    usedAi: status === 'success',
+    fallbackUsed: status !== 'success',
+    message,
+    durationMs: Date.now() - startedAt,
+  }
 }
 
 async function handleGenerate(request, response) {
@@ -200,6 +283,11 @@ async function handleGenerate(request, response) {
       selectedFiles,
       selectedFileContents
     )
+    const analysisReport = createAiAnalysisReport(
+      aiAnalysis,
+      readmeData,
+      selectedFileContents
+    )
 
     // 정상 조회된 저장소 정보, 파일 목록, 핵심 파일 내용, README 생성용 데이터를 반환
     sendJson(response, 200, {
@@ -209,6 +297,7 @@ async function handleGenerate(request, response) {
       selectedFiles,
       selectedFileContents,
       readmeData,
+      analysisReport,
     })
   } catch (error) {
     if (error instanceof GithubApiError) {

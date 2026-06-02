@@ -4,6 +4,7 @@ import MarkdownEditor from './components/MarkdownEditor.jsx'
 import MarkdownPreview from './components/MarkdownPreview.jsx'
 import ActionButtons from './components/ActionButtons.jsx'
 import ReadmeOptions from './components/ReadmeOptions.jsx'
+import AnalysisReport from './components/AnalysisReport.jsx'
 import { requestReadme } from './api/repoApi.js'
 import { parseGithubUrl } from './utils/parseGithubUrl.js'
 import './App.css'
@@ -28,6 +29,7 @@ function App() {
   const [url, setUrl] = useState('')
   const [sections, setSections] = useState(DEFAULT_SECTIONS)
   const [markdown, setMarkdown] = useState('')
+  const [analysisReport, setAnalysisReport] = useState(null)
   const [loading, setLoading] = useState(false)
   const selectedSectionCount = Object.values(sections).filter(Boolean).length
   const totalSectionCount = Object.keys(DEFAULT_SECTIONS).length
@@ -50,6 +52,7 @@ function App() {
     }
 
     setLoading(true)
+    setAnalysisReport(null)
 
     try {
       const { owner, repo } = parseGithubUrl(url)
@@ -58,6 +61,7 @@ function App() {
       })
 
       setMarkdown(response.markdown)
+      setAnalysisReport(response.repo.analysisReport)
     } catch (error) {
       alert(error.message)
     } finally {
@@ -126,6 +130,8 @@ function App() {
             </div>
             <ActionButtons markdown={markdown} />
           </div>
+
+          <AnalysisReport report={analysisReport} />
 
           <section className="markdown-workspace">
             <MarkdownEditor
