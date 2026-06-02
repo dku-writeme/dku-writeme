@@ -12,6 +12,7 @@ function getGithubHeaders() {
     const token = process.env.GITHUB_TOKEN
     return {
         'Accept': 'application/vnd.github+json',
+        'User-Agent': 'dku-writeme-app',
         ...(token && { 'Authorization': `Bearer ${token}` })
     }
 }

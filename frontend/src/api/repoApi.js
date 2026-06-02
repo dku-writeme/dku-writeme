@@ -173,7 +173,6 @@ const formatTopics = (topics, lang = 'en') => {
   if (!topics || topics.length === 0) {
     return TEXT[lang].none
   }
-
   return topics.join(', ')
 }
 
@@ -182,7 +181,6 @@ const formatDate = (date, lang = 'en') => {
   if (!date) {
     return TEXT[lang].none
   }
-
   return new Date(date).toLocaleDateString()
 }
 
@@ -300,12 +298,9 @@ const formatLicense = (license, lang = 'en') => {
 const formatImportantFiles = (readmeData, lang = 'en') => {
   // 백엔드에서 정리한 핵심 파일 목록이 없으면 None으로 표시
   const files = readmeData?.importantFiles || []
-
   if (files.length === 0) {
     return `- ${TEXT[lang].none}`
   }
-
-  // README가 너무 길어지지 않도록 상위 핵심 파일만 보여줌
   return files
     .slice(0, 8)
     .map((file) => `- \`${file.path}\` - ${translate(file.reason, lang)}`)
@@ -334,12 +329,9 @@ const formatScripts = (readmeData, lang = 'en') => {
   // 분석된 scripts 정보가 없으면 None으로 표시
   const scripts = readmeData?.analysis?.scripts || {}
   const scriptEntries = Object.entries(scripts)
-
   if (scriptEntries.length === 0) {
     return `- ${TEXT[lang].none}`
   }
-
-  // README에 보여줄 주요 실행 스크립트만 정리
   return scriptEntries
     .slice(0, 6)
     .map(([name, command]) => `- \`${name}\`: \`${command}\``)
@@ -359,12 +351,9 @@ const formatProjectStructure = (readmeData, lang = 'en') => {
 
   // 백엔드에서 정리한 최상위 폴더 목록이 없으면 None으로 표시
   const directories = readmeData?.fileSummary?.topLevelDirectories || []
-
   if (directories.length === 0) {
     return `- ${TEXT[lang].none}`
   }
-
-  // 프로젝트 구조를 간단히 보여주기 위해 상위 폴더만 표시
   return directories
     .slice(0, 8)
     .map((directory) => `- \`${directory}/\``)
@@ -509,7 +498,7 @@ const buildMarkdown = (repoInfo, options) => {
   ]) + '\n'
 }
 
-// owner, repo, template 값을 기반으로 README markdown 생성 요청 처리
+// owner, repo, options 값을 기반으로 README markdown 생성 요청 처리
 export async function requestReadme(owner, repo, options = DEFAULT_OPTIONS) {
   const readmeOptions = normalizeOptions(options)
 
@@ -521,7 +510,6 @@ export async function requestReadme(owner, repo, options = DEFAULT_OPTIONS) {
       body: JSON.stringify({ owner, repo }),
     })
 
-    // 백엔드 응답 body를 JSON 객체로 변환
     const repoInfo = await response.json()
 
     if (!response.ok) {
@@ -529,7 +517,6 @@ export async function requestReadme(owner, repo, options = DEFAULT_OPTIONS) {
       throw new Error(repoInfo.message || '서버 응답 에러')
     }
 
-    // 선택된 템플릿으로 README markdown을 생성해 repo 원본 정보와 함께 반환
     return {
       markdown: buildMarkdown(repoInfo, readmeOptions),
       repo: repoInfo,
