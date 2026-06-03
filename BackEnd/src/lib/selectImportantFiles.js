@@ -32,6 +32,35 @@ const IMPORTANT_DIRECTORIES = [
     '__tests__',
 ]
 
+// 파일명만으로도 프로젝트 동작 파악에 중요한 소스 파일
+const IMPORTANT_SOURCE_PATTERNS = [
+    {
+        pattern: /Application\.(java|kt)$/,
+        priority: 1,
+        reason: '애플리케이션 진입점 파일',
+    },
+    {
+        pattern: /(Controller|Handler|Route|Router)\.(java|kt|js|ts|jsx|tsx|py|go|rb|php)$/,
+        priority: 1,
+        reason: '요청 처리 흐름을 보여주는 컨트롤러/라우터 파일',
+    },
+    {
+        pattern: /(Service|UseCase)\.(java|kt|js|ts|jsx|tsx|py|go|rb|php)$/,
+        priority: 1,
+        reason: '비즈니스 로직을 보여주는 서비스 파일',
+    },
+    {
+        pattern: /(Repository|Dao|Model|Entity)\.(java|kt|js|ts|jsx|tsx|py|go|rb|php)$/,
+        priority: 1,
+        reason: '데이터 모델과 저장소 흐름을 보여주는 파일',
+    },
+    {
+        pattern: /(Configuration|Config)\.(java|kt|js|ts|jsx|tsx|py|go|rb|php)$/,
+        priority: 2,
+        reason: '프로젝트 설정 흐름을 보여주는 파일',
+    },
+]
+
 // README 분석 대상에서 제외할 폴더명
 const IGNORED_DIRECTORIES = [
     'node_modules',
@@ -58,6 +87,7 @@ function isIgnoredPath(path) {
 function getImportantFileInfo(path) {
     // 파일명 기준으로 README 생성에 직접 필요한 설정 파일인지 확인함
     const filename = path.split('/').pop().toLowerCase()
+    const originalFilename = path.split('/').pop()
     if (filename === 'readme' || filename.startsWith('readme.')) {
         return {
             priority: 1,
@@ -69,6 +99,14 @@ function getImportantFileInfo(path) {
         return {
             priority: 1,
             reason: IMPORTANT_FILE_REASONS[filename],
+        }
+    }
+
+    const sourcePattern = IMPORTANT_SOURCE_PATTERNS.find(({ pattern }) => pattern.test(originalFilename))
+    if (sourcePattern) {
+        return {
+            priority: sourcePattern.priority,
+            reason: sourcePattern.reason,
         }
     }
 
@@ -103,6 +141,11 @@ export function selectImportantFiles(files) {
             const priorityDiff = a.priority - b.priority
             if (priorityDiff !== 0) {
                 return priorityDiff
+            }
+
+            const sizeDiff = a.size - b.size
+            if (sizeDiff !== 0 && a.priority > 1) {
+                return sizeDiff
             }
 
             return getPathParts(a.path).length - getPathParts(b.path).length

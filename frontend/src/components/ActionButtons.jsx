@@ -1,5 +1,7 @@
+import { CopyIcon, DownloadIcon } from './Icons.jsx'
+
 // 완성된 README markdown을 복사하거나 README.md 파일로 다운로드하는 컴포넌트
-function ActionButtons({ markdown }) {
+function ActionButtons({ markdown, disabled = false }) {
   // Clipboard API를 사용해 현재 markdown 내용을 클립보드에 저장
   const handleCopy = async () => {
     if (!markdown) {
@@ -36,10 +38,12 @@ function ActionButtons({ markdown }) {
 
   return (
     <div className="action-buttons">
-      <button type="button" onClick={handleCopy}>
+      <button type="button" onClick={handleCopy} disabled={disabled}>
+        <CopyIcon />
         복사
       </button>
-      <button type="button" onClick={handleDownload}>
+      <button type="button" onClick={handleDownload} disabled={disabled}>
+        <DownloadIcon />
         다운로드
       </button>
     </div>
