@@ -13,10 +13,6 @@ const DEFAULT_OPTIONS = {
     repositoryInfo: true,
     techStack: true,
     features: true,
-    installation: true,
-    usage: true,
-    build: true,
-    test: true,
     projectStructure: true,
     importantFiles: true,
     scripts: true,
@@ -37,8 +33,6 @@ const TEXT = {
     topics: 'Topics',
     lastUpdated: 'Last Updated',
     createdAt: 'Created At',
-    installation: 'Installation',
-    usage: 'Usage',
     features: 'Features',
     projectStructure: 'Project Structure',
     importantFiles: 'Important Files',
@@ -47,9 +41,6 @@ const TEXT = {
     link: 'Link',
     overview: 'Overview',
     techStack: 'Tech Stack',
-    prerequisites: 'Prerequisites',
-    build: 'Build',
-    test: 'Test',
     projectInfo: 'Project Info',
     repository: 'Repository',
     url: 'URL',
@@ -74,8 +65,6 @@ const TEXT = {
     topics: '토픽',
     lastUpdated: '마지막 업데이트',
     createdAt: '생성일',
-    installation: '설치 방법',
-    usage: '실행 방법',
     features: '주요 기능',
     projectStructure: '프로젝트 구조',
     importantFiles: '핵심 파일',
@@ -84,9 +73,6 @@ const TEXT = {
     link: '링크',
     overview: '개요',
     techStack: '기술 스택',
-    prerequisites: '사전 요구사항',
-    build: '빌드 방법',
-    test: '테스트 방법',
     projectInfo: '프로젝트 정보',
     repository: '저장소',
     url: 'URL',
@@ -401,37 +387,6 @@ const formatOverview = (repoInfo, lang = 'en') => {
   return lines.join('\n\n')
 }
 
-const formatPrerequisites = (repoInfo, lang = 'en') => {
-  const analysis = repoInfo.readmeData?.analysis || {}
-  const requirements = new Set()
-
-  if (analysis.primaryLanguage === 'Java' || analysis.techStack?.includes('Spring Boot')) {
-    requirements.add(lang === 'en' ? 'Java 17 or later' : 'Java 17 이상')
-  }
-  if (analysis.buildTools?.includes('Maven')) {
-    requirements.add(lang === 'en' ? 'Maven wrapper included (`./mvnw`)' : 'Maven Wrapper 포함 (`./mvnw`)')
-  }
-  if (analysis.buildTools?.includes('Gradle')) {
-    requirements.add(lang === 'en' ? 'Gradle wrapper included (`./gradlew`)' : 'Gradle Wrapper 포함 (`./gradlew`)')
-  }
-  if (analysis.techStack?.includes('Docker')) {
-    requirements.add(lang === 'en' ? 'Docker for containerized services' : '컨테이너 서비스 실행을 위한 Docker')
-  }
-  if (analysis.buildTools?.includes('npm')) {
-    requirements.add('Node.js')
-    requirements.add('npm')
-  }
-  if (analysis.buildTools?.includes('Python')) {
-    requirements.add('Python')
-  }
-
-  if (requirements.size === 0) {
-    return `- ${TEXT[lang].none}`
-  }
-
-  return Array.from(requirements).map((item) => `- ${item}`).join('\n')
-}
-
 const buildRepositoryInfo = (repoInfo, lang) => {
   const text = TEXT[lang]
   const repository = repoInfo.readmeData?.repository || {}
@@ -447,16 +402,6 @@ const buildRepositoryInfo = (repoInfo, lang) => {
     `- ${text.topics}: ${formatTopics(repoInfo.topics, lang)}`,
     `- ${text.lastUpdated}: ${formatDate(repoInfo.updatedAt, lang)}`,
   ].join('\n')
-}
-
-const buildCommandBlock = (command) => `\`\`\`bash\n${command}\n\`\`\``
-
-const buildCommandSectionContent = (command, fallback, lang) => {
-  if (isMissingCommand(command, lang)) {
-    return fallback
-  }
-
-  return buildCommandBlock(command)
 }
 
 const buildProjectCommandBlock = (scripts) =>
@@ -488,31 +433,6 @@ const buildStandardSections = (repoInfo, lang, sections) => {
     sectionBlock(sections, 'overview', text.overview, formatOverview(repoInfo, lang)),
     sectionBlock(sections, 'repositoryInfo', text.repositoryInfo, buildRepositoryInfo(repoInfo, lang)),
     sectionBlock(sections, 'techStack', text.techStack, formatTechStack(repoInfo, lang)),
-    sectionBlock(sections, 'installation', text.prerequisites, formatPrerequisites(repoInfo, lang)),
-    sectionBlock(
-      sections,
-      'installation',
-      text.installation,
-      buildCommandSectionContent(scripts.install, text.noInstallCommand, lang)
-    ),
-    sectionBlock(
-      sections,
-      'usage',
-      text.usage,
-      buildCommandSectionContent(scripts.dev, text.noRunCommand, lang)
-    ),
-    sectionBlock(
-      sections,
-      'build',
-      text.build,
-      buildCommandSectionContent(scripts.build, text.noBuildCommand, lang)
-    ),
-    sectionBlock(
-      sections,
-      'test',
-      text.test,
-      buildCommandSectionContent(scripts.test, text.noTestCommand, lang)
-    ),
     sectionBlock(sections, 'features', text.features, formatFeatures(repoInfo, lang)),
     sectionBlock(
       sections,

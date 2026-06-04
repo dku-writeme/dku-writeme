@@ -329,7 +329,7 @@ export function organizeReadmeData(repoInfo, files, selectedFiles, selectedFileC
         '프로젝트 소개',
         '주요 기능',
         '기술 스택',
-        '설치 및 실행 방법',
+        '실행 스크립트',
         '라이선스',
       ],
     },
