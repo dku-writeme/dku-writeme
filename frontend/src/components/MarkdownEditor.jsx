@@ -13,27 +13,6 @@ import {
 
 const README_SNIPPETS = [
   {
-    value: 'installation',
-    label: '설치 방법',
-    markdown: `## 설치 방법
-
-\`\`\`bash
-npm install
-npm run dev
-\`\`\`
-`,
-  },
-  {
-    value: 'usage',
-    label: '사용 예시',
-    markdown: `## 사용 방법
-
-1. 저장소를 클론합니다.
-2. 의존성을 설치합니다.
-3. 개발 서버를 실행합니다.
-`,
-  },
-  {
     value: 'features',
     label: '기능 목록',
     markdown: `## 주요 기능
@@ -73,18 +52,6 @@ const MARKDOWN_COMPLETIONS = [
     detail: '프로젝트 소개 섹션',
     type: 'section',
     apply: '## 프로젝트 소개\n\n이 프로젝트의 목적과 핵심 가치를 설명합니다.\n',
-  },
-  {
-    label: 'Installation',
-    detail: '설치 방법',
-    type: 'section',
-    apply: '## 설치 방법\n\n```bash\nnpm install\nnpm run dev\n```\n',
-  },
-  {
-    label: 'Usage',
-    detail: '사용 방법',
-    type: 'section',
-    apply: '## 사용 방법\n\n1. 저장소를 클론합니다.\n2. 의존성을 설치합니다.\n3. 개발 서버를 실행합니다.\n',
   },
   {
     label: 'Features',
