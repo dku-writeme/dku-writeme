@@ -6,6 +6,7 @@ const API_BASE_URL = (
 
 const buildApiUrl = (path) => `${API_BASE_URL}${path}`
 
+// README 생성 옵션의 기본값. 사용자가 일부 섹션만 넘겨도 나머지는 여기 값으로 채움
 const DEFAULT_OPTIONS = {
   language: 'ko',
   sections: {
@@ -20,6 +21,7 @@ const DEFAULT_OPTIONS = {
   },
 }
 
+// README 제목과 안내 문구를 언어별로 관리해 템플릿 생성 로직에서 하드코딩을 줄임
 const TEXT = {
   en: {
     repositoryInfo: 'Repository Information',
@@ -87,6 +89,7 @@ const TEXT = {
   },
 }
 
+// 예전 호출 방식이나 부분 옵션 객체가 들어와도 내부에서는 항상 같은 형태로 다루기 위한 정규화
 const normalizeOptions = (options = {}) => {
   if (typeof options === 'string') {
     return {
@@ -106,6 +109,7 @@ const normalizeOptions = (options = {}) => {
 
 const enabled = (sections, key) => sections[key] !== false
 
+// 선택 해제된 섹션은 빈 문자열을 반환해 joinBlocks 단계에서 자연스럽게 제외되게 함
 const sectionBlock = (sections, key, title, content) => {
   if (!enabled(sections, key)) {
     return ''
@@ -116,6 +120,7 @@ const sectionBlock = (sections, key, title, content) => {
 
 const joinBlocks = (blocks) => blocks.filter(Boolean).join('\n\n')
 
+// rule-based 분석 결과가 한국어로 저장되어 있을 때 영어 README 옵션에서만 대응 문구로 바꿈
 const TRANSLATIONS = {
   en: {
     'Spring Boot 기반 웹 애플리케이션 구조': 'Spring Boot based web application structure',
@@ -173,6 +178,7 @@ const formatDate = (date, lang = 'en') => {
 const findPackageJson = (selectedFileContents = []) =>
   selectedFileContents.find((file) => file.path?.split('/').pop() === 'package.json')
 
+// 백엔드 분석 결과에 scripts가 없을 때 selectedFileContents의 package.json을 보조 출처로 사용
 const extractPackageScripts = (repoInfo) => {
   const scripts = repoInfo.readmeData?.analysis?.scripts || {}
 
@@ -237,6 +243,7 @@ function extractScripts(repoInfo, lang = 'en') {
 
 const formatFeatures = (repoInfo, lang = 'en') => {
   const features = repoInfo.features || repoInfo.readmeData?.analysis?.detectedFeatures
+  // AI 응답은 문자열/배열/여러 줄 bullet 등 형태가 흔들릴 수 있어 한 번 평탄화
   const normalizeFeatureItems = (featureItems) =>
     featureItems
       .flatMap((feature) =>
@@ -269,6 +276,7 @@ const formatFeatures = (repoInfo, lang = 'en') => {
 }
 
 const formatTechStack = (repoInfo, lang = 'en') => {
+  // 같은 기술이 여러 탐지 경로에서 중복될 수 있으므로 Set으로 한 번 정리
   const techStack = Array.from(new Set(repoInfo.readmeData?.analysis?.techStack || []))
 
   if (techStack.length > 0) {
@@ -289,6 +297,7 @@ const formatLicense = (license, lang = 'en') => {
 const isMissingCommand = (command, lang = 'en') => {
   if (!command) return true
 
+  // 실제 명령어와 "감지된 명령어 없음" 안내 문구를 구분해 빈 코드 블록 생성을 피함
   return [
     TEXT.en.noInstallCommand,
     TEXT.en.noRunCommand,
@@ -315,7 +324,17 @@ const formatImportantFiles = (readmeData, lang = 'en') => {
     .join('\n')
 }
 
-// package.json에서 추출한 실행 스크립트를 markdown 리스트 형태로 변환
+const formatCommandBlock = (commandEntries) => {
+  if (commandEntries.length === 0) {
+    return ''
+  }
+
+  return `\`\`\`bash\n${commandEntries
+    .map(([name, command]) => `# ${name}\n${command}`)
+    .join('\n\n')}\n\`\`\``
+}
+
+// package.json에서 추출한 실행 스크립트를 복사 가능한 bash 코드 블록으로 변환
 const formatScripts = (readmeData, lang = 'en') => {
   const commands = readmeData?.analysis?.commands
 
@@ -328,9 +347,7 @@ const formatScripts = (readmeData, lang = 'en') => {
     ].filter(([, command]) => !isMissingCommand(command, lang))
 
     if (commandEntries.length > 0) {
-      return commandEntries
-        .map(([name, command]) => `- \`${name}\`: \`${command}\``)
-        .join('\n')
+      return formatCommandBlock(commandEntries)
     }
   }
 
@@ -340,10 +357,11 @@ const formatScripts = (readmeData, lang = 'en') => {
   if (scriptEntries.length === 0) {
     return `- ${TEXT[lang].none}`
   }
-  return scriptEntries
+  const commandEntries = scriptEntries
     .slice(0, 6)
-    .map(([name, command]) => `- \`${name}\`: \`${command}\``)
-    .join('\n')
+    .map(([name]) => [name, `npm run ${name}`])
+
+  return formatCommandBlock(commandEntries)
 }
 
 // 전체 파일 트리에서 최상위 폴더 목록을 README 구조 섹션 형태로 변환
@@ -352,7 +370,7 @@ const formatProjectStructure = (readmeData, lang = 'en') => {
 
   if (highlights.length > 0) {
     return highlights
-      .slice(0, 8)
+      .slice(0, 12)
       .map((item) => `- \`${item.path}\` - ${translate(item.description, lang)}`)
       .join('\n')
   }
@@ -363,20 +381,17 @@ const formatProjectStructure = (readmeData, lang = 'en') => {
     return `- ${TEXT[lang].none}`
   }
   return directories
-    .slice(0, 8)
+    .slice(0, 12)
     .map((directory) => `- \`${directory}/\``)
     .join('\n')
 }
 
 const formatOverview = (repoInfo, lang = 'en') => {
-  const analysis = repoInfo.readmeData?.analysis || {}
   const text = TEXT[lang]
+  // 상단 인용문과 중복되지 않도록 개요에는 저장소 설명만 간결하게 표시
   const lines = [
     repoInfo.description && repoInfo.description !== 'None'
       ? repoInfo.description
-      : null,
-    analysis.projectType
-      ? `${text.projectInfo}: ${analysis.projectType}`
       : null,
   ].filter(Boolean)
 
@@ -426,6 +441,7 @@ const buildStandardSections = (repoInfo, lang, sections) => {
   const text = TEXT[lang]
   const scripts = extractScripts(repoInfo, lang)
 
+  // 각 formatter가 섹션 본문만 만들고, 여기서 최종 README 섹션 순서를 결정
   return [
     `# ${repoInfo.name}`,
     buildBadgeHeader(repoInfo),
@@ -458,14 +474,16 @@ const buildStandardSections = (repoInfo, lang, sections) => {
 
 const buildMarkdown = (repoInfo, options) => {
   const language = options.language === 'en' ? 'en' : 'ko'
+  // 최종 markdown은 선택된 표준 섹션과 저장소 링크 섹션을 합쳐 하나의 문서로 반환
   return joinBlocks([
     ...buildStandardSections(repoInfo, language, options.sections),
-    `## ${TEXT[language].link}\n\n${repoInfo.url}`,
+    `## ${TEXT[language].link}\n\n[GitHub Repository](${repoInfo.url})`,
   ]) + '\n'
 }
 
 const parseStreamBuffer = (buffer, onEvent) => {
   const lines = buffer.split('\n')
+  // NDJSON chunk는 줄 중간에서 끊길 수 있으므로 마지막 조각은 다음 chunk와 합침
   const remainingBuffer = lines.pop() || ''
 
   lines
@@ -540,6 +558,7 @@ export async function requestReadmeStream(
     const reader = response.body.getReader()
     const decoder = new TextDecoder()
 
+    // progress 이벤트는 UI 핸들러로 전달하고, complete 이벤트만 최종 markdown 생성에 사용
     const handleEvent = (event) => {
       handlers.onEvent?.(event)
 
@@ -562,9 +581,11 @@ export async function requestReadmeStream(
         break
       }
 
+      // stream 옵션을 켜서 멀티바이트 한글 문자가 chunk 경계에서 깨지지 않게 디코딩
       buffer = parseStreamBuffer(buffer + decoder.decode(value, { stream: true }), handleEvent)
     }
 
+    // 스트림 종료 후 decoder에 남아 있는 텍스트와 미완성 라인을 마지막으로 처리
     const trailingText = buffer + decoder.decode()
     if (trailingText.trim()) {
       parseStreamBuffer(`${trailingText}\n`, handleEvent)

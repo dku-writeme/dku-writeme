@@ -187,6 +187,10 @@ function githubErrorMessage(error) {
     return 'GitHub 저장소를 찾을 수 없습니다. owner/repo 이름과 공개 여부를 확인해주세요.'
   }
 
+  if (error.status === 409) {
+    return 'GitHub 저장소가 비어 있거나 기본 브랜치 파일 트리를 가져올 수 없습니다.'
+  }
+
   return `GitHub API 요청에 실패했습니다. (${error.status}) ${error.message}`
 }
 

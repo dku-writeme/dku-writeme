@@ -72,19 +72,18 @@ export async function deliverFileTree(owner, repo, branch) {
     const encodedBranch = encodeURIComponent(branch)
     const apiUrl = `https://api.github.com/repos/${owner}/${repo}/git/trees/${encodedBranch}?recursive=1`
 
-    try {
-        // 2. GitHub API로 파일/폴더 목록 요청
-        const data = await requestGithubJson(apiUrl)
-        return data.tree.map((file) => ({
-            path: file.path,
-            type: file.type,
-            size: file.size || 0
-        }));
-    } catch (error) {
-        // 파일 트리 조회 실패 시 기본 정보 조회는 유지할 수 있도록 빈 배열 반환
-        console.error("파일 트리를 가져오는 중 오류가 발생했습니다: ", error);
-        return [];
+    // 2. GitHub API로 파일/폴더 목록 요청
+    const data = await requestGithubJson(apiUrl)
+
+    if (!Array.isArray(data.tree)) {
+        throw new Error('GitHub 파일 트리 응답 형식이 올바르지 않습니다.')
     }
+
+    return data.tree.map((file) => ({
+        path: file.path,
+        type: file.type,
+        size: file.size || 0
+    }));
 }
 
 const DEFAULT_MAX_CONTENT_FILES = 30

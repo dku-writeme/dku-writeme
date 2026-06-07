@@ -1,4 +1,4 @@
-from fastapi import FastAPI
+from fastapi import FastAPI, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel
 from huggingface_hub import InferenceClient
@@ -24,6 +24,9 @@ client = InferenceClient(
     token=HF_TOKEN
 )
 
+DISALLOWED_LANGUAGE_PATTERN = re.compile(r'[\u4e00-\u9fff\u3040-\u30ff\u0400-\u04ff]')
+MAX_AI_RETRIES = 2
+
 # 입력 데이터 형식 정의
 class AnalyzeRequest(BaseModel):
     name: str
@@ -39,41 +42,76 @@ def clean_response(text):
         if keyword in text:
             print(f"⚠️ 환각 감지: '{keyword}' 포함")
     # 한자, 일본어, 러시아어 등 비한국어 문자 감지
-    non_korean = re.findall(r'[\u4e00-\u9fff\u3040-\u30ff\u0400-\u04ff]', text)
+    non_korean = DISALLOWED_LANGUAGE_PATTERN.findall(text)
     if non_korean:
         print(f"⚠️ 비정상 문자 감지: {non_korean}")
     return text
 
+def has_disallowed_language(text):
+    return bool(DISALLOWED_LANGUAGE_PATTERN.search(text or ""))
+
 def call_ai(prompt):
-    response = client.chat_completion(
-        messages=[
-            {
-                "role": "system",
-                "content": "당신은 코드 분석 전문가입니다. 반드시 한국어로만 작성하세요. 한자, 일본어, 중국어, 러시아어 사용 금지."
-            },
-            {
+    messages = [
+        {
+            "role": "system",
+            "content": (
+                "당신은 코드 분석 전문가입니다. 모든 답변은 반드시 완성된 한국어 문장으로만 작성하세요. "
+                "중국어, 일본어, 러시아어, 한자 문자는 절대 사용하지 마세요. "
+                "금지 문자 예시: 的, 是, 了, 项, 目, 功, 能, 系, 统, 語, 中."
+            )
+        },
+        {
+            "role": "user",
+            "content": prompt
+        }
+    ]
+
+    last_text = ""
+    for attempt in range(MAX_AI_RETRIES + 1):
+        response = client.chat_completion(
+            messages=messages,
+            max_tokens=500,
+            temperature=0.2,
+        )
+        last_text = clean_response(response.choices[0].message.content.strip())
+
+        if not has_disallowed_language(last_text):
+            return last_text
+
+        if attempt < MAX_AI_RETRIES:
+            print(f"⚠️ 비한국어 응답으로 재시도합니다. ({attempt + 1}/{MAX_AI_RETRIES})")
+            messages.append({
+                "role": "assistant",
+                "content": last_text
+            })
+            messages.append({
                 "role": "user",
-                "content": prompt
-            }
-        ],
-        max_tokens=500,
-    )
-    return clean_response(response.choices[0].message.content.strip())
+                "content": (
+                    "방금 답변에 중국어/일본어/한자 문자가 포함되었습니다. "
+                    "해당 문자를 모두 제거하고, 같은 내용을 한국어로만 다시 작성하세요."
+                )
+            })
+
+    raise ValueError(f"AI 응답에 금지된 문자가 포함되었습니다: {last_text[:80]}")
 
 @app.post("/analyze")
 async def analyze(req: AnalyzeRequest):
     context = json.dumps(req.model_dump(), indent=2, ensure_ascii=False)
 
     # 질문 1. 프로젝트 설명 (description 없을 때만 AI 사용)
-    if not req.description or req.description in ("None", ""):
-        print("💡 [INFO] description이 없거나 비어 있습니다. ➡️ AI 분석을 호출합니다.")
+    if not req.description or req.description in ("None", "") or has_disallowed_language(req.description):
+        print("💡 [INFO] description이 없거나 비한국어 문자가 포함되어 있습니다. ➡️ AI 분석을 호출합니다.")
         prompt_desc = f"""아래는 GitHub 저장소의 파일 목록과 내용입니다.
         [데이터]
         {context}
         이 프로그램을 한 줄로 설명하시오.
         - 마크다운 없이 순수 텍스트 한 문장으로만 출력
+        - 입력 데이터에 중국어/일본어/한자가 있어도 출력에는 절대 포함하지 말 것
         - 한국어만 사용"""
-        description = call_ai(prompt_desc)
+        try:
+            description = call_ai(prompt_desc)
+        except ValueError as error:
+            raise HTTPException(status_code=422, detail=str(error)) from error
     else:
         print(f"✅ [INFO] 기존 description이 존재합니다. AI를 사용하지 않고 기존 데이터를 유지합니다.")
         print(f"   (기존 내용: {req.description[:30]}...)")
@@ -83,7 +121,7 @@ async def analyze(req: AnalyzeRequest):
     prompt_features = f"""아래는 GitHub 저장소의 파일 목록과 내용입니다.
     [데이터]
     {context}
-    이 프로그램의 주요 기능을 2~5가지로 작성하시오.
+    이 프로그램의 주요 기능을 2~7가지로 작성하시오.
     [출력 규칙 - 반드시 준수]
     - 형식: "- 기능명: 설명" 한 줄로만
     - 설명은 20자 이내로 간결하게
@@ -108,7 +146,10 @@ async def analyze(req: AnalyzeRequest):
     - 구구단 게임: 구구단을 맞추는 게임입니다. (개별 나열)
     - Webpack 환경 구축: Babel과 Webpack을 사용합니다. (개발 도구 언급)
     """
-    features = call_ai(prompt_features)
+    try:
+        features = call_ai(prompt_features)
+    except ValueError as error:
+        raise HTTPException(status_code=422, detail=str(error)) from error
     
     print("\n" + "="*40)
     print("🚀 [AI SERVER] analyze 함수 반환 값 확인")

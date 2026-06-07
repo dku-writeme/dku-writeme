@@ -93,8 +93,10 @@ const MARKDOWN_COMPLETIONS = [
 
 // 생성된 README markdown을 전문 에디터에서 직접 수정하는 컴포넌트
 function MarkdownEditor({ markdown, lineCount, onChange }) {
+  // toolbar 버튼에서 현재 커서/선택 영역을 조작하기 위해 CodeMirror view를 보관
   const editorViewRef = useRef(null)
   const [headingMenuOpen, setHeadingMenuOpen] = useState(false)
+  // CodeMirror 확장은 렌더마다 새로 만들지 않도록 memoized 상태로 유지
   const editorExtensions = useMemo(
     () => [
       markdownLanguage(),
@@ -106,6 +108,7 @@ function MarkdownEditor({ markdown, lineCount, onChange }) {
     []
   )
 
+  // 선택 영역을 새 문자열로 바꾸고, 삽입 후 다시 선택될 범위를 지정
   const replaceSelection = (replacement, selectStartOffset = 0, selectEndOffset = replacement.length) => {
     const editorView = editorViewRef.current
 
@@ -126,6 +129,7 @@ function MarkdownEditor({ markdown, lineCount, onChange }) {
     editorView.focus()
   }
 
+  // 굵게/링크처럼 선택 텍스트 양쪽에 markdown 문법을 감싸는 공통 처리
   const wrapSelection = (prefix, suffix, fallback) => {
     const editorView = editorViewRef.current
 
@@ -140,6 +144,7 @@ function MarkdownEditor({ markdown, lineCount, onChange }) {
     replaceSelection(replacement, prefix.length, prefix.length + selectedText.length)
   }
 
+  // 목록/인용문처럼 선택된 여러 줄 앞에 같은 prefix를 붙이는 공통 처리
   const prefixSelectedLines = (prefix, fallback, normalizeLine = (line) => line) => {
     const editorView = editorViewRef.current
 
@@ -158,6 +163,7 @@ function MarkdownEditor({ markdown, lineCount, onChange }) {
     replaceSelection(replacement, replacement.length, replacement.length)
   }
 
+  // 섹션 snippet은 현재 커서 앞뒤 줄바꿈을 보정해서 기존 문서와 자연스럽게 이어 붙임
   const insertBlock = (block) => {
     const editorView = editorViewRef.current
 
@@ -177,6 +183,7 @@ function MarkdownEditor({ markdown, lineCount, onChange }) {
     replaceSelection(replacement, replacement.length, replacement.length)
   }
 
+  // 선택된 텍스트가 이미 heading이면 기존 # prefix를 제거하고 새 level로 다시 적용
   const insertHeading = (level) => {
     const editorView = editorViewRef.current
 
@@ -197,6 +204,7 @@ function MarkdownEditor({ markdown, lineCount, onChange }) {
     setHeadingMenuOpen(false)
   }
 
+  // 코드 블록은 선택 영역을 bash fenced block으로 감싸고 내용 부분을 다시 선택
   const handleCodeBlock = () => {
     const editorView = editorViewRef.current
 
@@ -211,6 +219,7 @@ function MarkdownEditor({ markdown, lineCount, onChange }) {
     replaceSelection(replacement, 8, 8 + selectedText.length)
   }
 
+  // select는 같은 항목을 다시 고를 수 있도록 삽입 후 빈 값으로 되돌림
   const handleSnippetChange = (event) => {
     const selectedSnippet = README_SNIPPETS.find((snippet) => snippet.value === event.target.value)
 

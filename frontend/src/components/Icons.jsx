@@ -1,3 +1,4 @@
+// 여러 아이콘이 같은 stroke/style 규칙을 공유하도록 공통 SVG 래퍼를 사용
 function IconBase({ children, ...props }) {
   return (
     <svg

@@ -23,7 +23,9 @@ const DEFAULT_SECTIONS = {
 
 function App() {
   // README 생성에 필요한 입력값과 화면 상태를 App에서 한 번에 관리
+  // abortControllerRef는 새 요청이 시작될 때 이전 스트리밍 요청을 중단하는 용도
   const abortControllerRef = useRef(null)
+  // requestIdRef는 느리게 도착한 이전 요청 결과가 최신 화면을 덮어쓰지 못하게 막음
   const requestIdRef = useRef(0)
   const [url, setUrl] = useState('')
   const [sections, setSections] = useState(DEFAULT_SECTIONS)
@@ -37,6 +39,7 @@ function App() {
   const markdownLineCount = markdown ? markdown.split('\n').length : 0
   const generationActive = loading || typing
 
+  // 사용자가 README에 포함할 섹션을 켜고 끌 때 기존 선택 상태를 보존하면서 한 항목만 변경
   const handleSectionToggle = (sectionKey) => {
     setSections((currentSections) => ({
       ...currentSections,
@@ -44,10 +47,12 @@ function App() {
     }))
   }
 
+  // 백엔드 스트리밍 이벤트와 프론트의 타이핑 이벤트를 같은 진행 목록에 누적
   const addGenerationEvent = (event) => {
     setGenerationEvents((currentEvents) => [...currentEvents, event])
   }
 
+  // 생성된 전체 markdown을 작은 조각으로 나누어 화면에 작성되는 느낌을 제공
   const typeMarkdown = async (fullMarkdown, requestId, signal) => {
     setTyping(true)
     setMarkdown('')
@@ -63,6 +68,7 @@ function App() {
     const delayMs = 8
 
     for (let index = 0; index < fullMarkdown.length; index += chunkSize) {
+      // 요청이 취소되었거나 더 최신 요청이 시작된 경우 현재 타이핑 루프를 즉시 중단
       if (signal.aborted || requestIdRef.current !== requestId) {
         throw new DOMException('README 생성이 취소되었습니다.', 'AbortError')
       }
@@ -94,6 +100,7 @@ function App() {
       return
     }
 
+    // 새 생성 요청을 시작하기 전에 진행 중이던 요청과 타이핑 애니메이션을 정리
     abortControllerRef.current?.abort()
     const requestId = requestIdRef.current + 1
     requestIdRef.current = requestId
@@ -116,6 +123,7 @@ function App() {
         },
         {
           onEvent: (event) => {
+            // 오래된 요청에서 뒤늦게 도착한 progress 이벤트는 화면에 반영하지 않음
             if (requestIdRef.current === requestId) {
               addGenerationEvent(event)
             }
@@ -124,6 +132,7 @@ function App() {
         abortController.signal
       )
 
+      // 스트리밍 완료 직후에도 최신 요청 여부를 다시 확인해 경쟁 상태를 방지
       if (requestIdRef.current !== requestId) {
         return
       }
