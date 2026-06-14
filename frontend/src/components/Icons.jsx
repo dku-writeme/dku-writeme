@@ -1,3 +1,4 @@
+// 여러 아이콘이 같은 stroke/style 규칙을 공유하도록 공통 SVG 래퍼를 사용
 function IconBase({ children, ...props }) {
   return (
     <svg
@@ -118,6 +119,28 @@ export function ImageIcon(props) {
       <rect x="3" y="5" width="18" height="14" rx="2" />
       <path d="M8 10h.01" />
       <path d="M21 15l-5-5L5 19" />
+    </IconBase>
+  )
+}
+
+export function MaximizeIcon(props) {
+  return (
+    <IconBase {...props}>
+      <path d="M8 3H3v5" />
+      <path d="M16 3h5v5" />
+      <path d="M21 16v5h-5" />
+      <path d="M3 16v5h5" />
+    </IconBase>
+  )
+}
+
+export function MinimizeIcon(props) {
+  return (
+    <IconBase {...props}>
+      <path d="M8 3v5H3" />
+      <path d="M16 3v5h5" />
+      <path d="M21 16h-5v5" />
+      <path d="M3 16h5v5" />
     </IconBase>
   )
 }

@@ -1,8 +1,19 @@
+import { useCallback } from 'react'
 import ReactMarkdown from 'react-markdown'
 import remarkGfm from 'remark-gfm'
 
 // markdown 문자열을 실제 README 미리보기 형태로 렌더링하는 컴포넌트
-function MarkdownPreview({ markdown, lineCount }) {
+function MarkdownPreview({ markdown, lineCount, onScrollElementReady }) {
+  // 미리보기 스크롤 DOM을 App에 전달해 에디터와의 스크롤 동기화에 사용
+  const setPreviewContentRef = useCallback(
+    (element) => {
+      if (element) {
+        onScrollElementReady?.(element)
+      }
+    },
+    [onScrollElementReady]
+  )
+
   return (
     <section className="markdown-preview">
       <header className="panel-titlebar">
@@ -12,7 +23,7 @@ function MarkdownPreview({ markdown, lineCount }) {
         </div>
         <span>{lineCount} lines</span>
       </header>
-      <div className="markdown-preview-content">
+      <div className="markdown-preview-content" ref={setPreviewContentRef}>
         {markdown ? (
           <ReactMarkdown remarkPlugins={[remarkGfm]}>{markdown}</ReactMarkdown>
         ) : (

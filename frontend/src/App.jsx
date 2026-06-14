@@ -1,4 +1,4 @@
-import { useRef, useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import UrlInput from './components/UrlInput.jsx'
 import MarkdownEditor from './components/MarkdownEditor.jsx'
 import MarkdownPreview from './components/MarkdownPreview.jsx'
@@ -6,25 +6,37 @@ import ActionButtons from './components/ActionButtons.jsx'
 import ReadmeOptions from './components/ReadmeOptions.jsx'
 import AnalysisReport from './components/AnalysisReport.jsx'
 import GenerationProgress from './components/GenerationProgress.jsx'
+import {
+  MaximizeIcon,
+  MinimizeIcon,
+} from './components/Icons.jsx'
 import { requestReadmeStream } from './api/repoApi.js'
 import { parseGithubUrl } from './utils/parseGithubUrl.js'
+import logoImage from './assets/logo.png'
 import './App.css'
 
 const DEFAULT_SECTIONS = {
   overview: true,
-  repositoryInfo: true,
-  techStack: true,
   features: true,
+  techStack: true,
   projectStructure: true,
-  importantFiles: true,
-  scripts: true,
+  // 추론 품질이 저장소마다 흔들릴 수 있는 상세 섹션은 사용자가 직접 켜도록 둠
+  importantFiles: false,
+  scripts: false,
   license: true,
+  link: true,
 }
 
 function App() {
   // README 생성에 필요한 입력값과 화면 상태를 App에서 한 번에 관리
+  // abortControllerRef는 새 요청이 시작될 때 이전 스트리밍 요청을 중단하는 용도
   const abortControllerRef = useRef(null)
+  // requestIdRef는 느리게 도착한 이전 요청 결과가 최신 화면을 덮어쓰지 못하게 막음
   const requestIdRef = useRef(0)
+  const scrollSyncRef = useRef(false)
+  // 에디터/미리보기 실제 스크롤 DOM을 받아 동기화 이벤트 연결에 사용
+  const [editorScrollElement, setEditorScrollElement] = useState(null)
+  const [previewScrollElement, setPreviewScrollElement] = useState(null)
   const [url, setUrl] = useState('')
   const [sections, setSections] = useState(DEFAULT_SECTIONS)
   const [markdown, setMarkdown] = useState('')
@@ -32,11 +44,57 @@ function App() {
   const [generationEvents, setGenerationEvents] = useState([])
   const [loading, setLoading] = useState(false)
   const [typing, setTyping] = useState(false)
+  const [editorFocusMode, setEditorFocusMode] = useState(false)
+  const [scrollSyncEnabled, setScrollSyncEnabled] = useState(true)
   const selectedSectionCount = Object.values(sections).filter(Boolean).length
   const totalSectionCount = Object.keys(DEFAULT_SECTIONS).length
   const markdownLineCount = markdown ? markdown.split('\n').length : 0
   const generationActive = loading || typing
 
+  useEffect(() => {
+    if (!scrollSyncEnabled || !editorScrollElement || !previewScrollElement) {
+      return undefined
+    }
+
+    // 양쪽 스크롤 이벤트가 서로를 다시 호출하지 않도록 동기화 중 상태 관리
+    const syncScrollPosition = (sourceElement, targetElement) => {
+      if (scrollSyncRef.current) {
+        return
+      }
+
+      const sourceScrollableHeight = sourceElement.scrollHeight - sourceElement.clientHeight
+      const targetScrollableHeight = targetElement.scrollHeight - targetElement.clientHeight
+
+      if (sourceScrollableHeight <= 0 || targetScrollableHeight <= 0) {
+        return
+      }
+
+      scrollSyncRef.current = true
+      targetElement.scrollTop =
+        (sourceElement.scrollTop / sourceScrollableHeight) * targetScrollableHeight
+
+      window.requestAnimationFrame(() => {
+        scrollSyncRef.current = false
+      })
+    }
+
+    const handleEditorScroll = () => {
+      syncScrollPosition(editorScrollElement, previewScrollElement)
+    }
+    const handlePreviewScroll = () => {
+      syncScrollPosition(previewScrollElement, editorScrollElement)
+    }
+
+    editorScrollElement.addEventListener('scroll', handleEditorScroll, { passive: true })
+    previewScrollElement.addEventListener('scroll', handlePreviewScroll, { passive: true })
+
+    return () => {
+      editorScrollElement.removeEventListener('scroll', handleEditorScroll)
+      previewScrollElement.removeEventListener('scroll', handlePreviewScroll)
+    }
+  }, [editorScrollElement, previewScrollElement, scrollSyncEnabled])
+
+  // 사용자가 README에 포함할 섹션을 켜고 끌 때 기존 선택 상태를 보존하면서 한 항목만 변경
   const handleSectionToggle = (sectionKey) => {
     setSections((currentSections) => ({
       ...currentSections,
@@ -44,10 +102,12 @@ function App() {
     }))
   }
 
+  // 백엔드 스트리밍 이벤트와 프론트의 타이핑 이벤트를 같은 진행 목록에 누적
   const addGenerationEvent = (event) => {
     setGenerationEvents((currentEvents) => [...currentEvents, event])
   }
 
+  // 생성된 전체 markdown을 작은 조각으로 나누어 화면에 작성되는 느낌을 제공
   const typeMarkdown = async (fullMarkdown, requestId, signal) => {
     setTyping(true)
     setMarkdown('')
@@ -63,6 +123,7 @@ function App() {
     const delayMs = 8
 
     for (let index = 0; index < fullMarkdown.length; index += chunkSize) {
+      // 요청이 취소되었거나 더 최신 요청이 시작된 경우 현재 타이핑 루프를 즉시 중단
       if (signal.aborted || requestIdRef.current !== requestId) {
         throw new DOMException('README 생성이 취소되었습니다.', 'AbortError')
       }
@@ -94,6 +155,7 @@ function App() {
       return
     }
 
+    // 새 생성 요청을 시작하기 전에 진행 중이던 요청과 타이핑 애니메이션을 정리
     abortControllerRef.current?.abort()
     const requestId = requestIdRef.current + 1
     requestIdRef.current = requestId
@@ -105,6 +167,7 @@ function App() {
     setMarkdown('')
     setAnalysisReport(null)
     setGenerationEvents([])
+    setEditorFocusMode(false)
 
     try {
       const { owner, repo } = parseGithubUrl(url)
@@ -116,6 +179,7 @@ function App() {
         },
         {
           onEvent: (event) => {
+            // 오래된 요청에서 뒤늦게 도착한 progress 이벤트는 화면에 반영하지 않음
             if (requestIdRef.current === requestId) {
               addGenerationEvent(event)
             }
@@ -124,6 +188,7 @@ function App() {
         abortController.signal
       )
 
+      // 스트리밍 완료 직후에도 최신 요청 여부를 다시 확인해 경쟁 상태를 방지
       if (requestIdRef.current !== requestId) {
         return
       }
@@ -150,12 +215,10 @@ function App() {
   }
 
   return (
-    <main className="app">
+    <main className={`app${editorFocusMode ? ' app-editor-focus' : ''}`}>
       <header className="app-header">
         <div className="brand-lockup">
-          <span className="brand-mark" aria-hidden="true">
-            W
-          </span>
+          <img className="brand-mark" src={logoImage} alt="" aria-hidden="true" />
           <div>
             <p className="eyebrow">README BUILDER</p>
             <h1>WRITEME.md</h1>
@@ -208,7 +271,27 @@ function App() {
               <p className="eyebrow">LIVE README</p>
               <h2>편집 및 미리보기</h2>
             </div>
-            <ActionButtons markdown={markdown} disabled={generationActive} />
+            <div className="workspace-actions">
+              <label className="scroll-sync-toggle">
+                <input
+                  type="checkbox"
+                  checked={scrollSyncEnabled}
+                  onChange={(event) => setScrollSyncEnabled(event.target.checked)}
+                />
+                <span aria-hidden="true" />
+                <strong>스크롤 동기화</strong>
+              </label>
+              <button
+                className="focus-mode-button"
+                type="button"
+                aria-pressed={editorFocusMode}
+                onClick={() => setEditorFocusMode((currentMode) => !currentMode)}
+              >
+                {editorFocusMode ? <MinimizeIcon /> : <MaximizeIcon />}
+                {editorFocusMode ? '기본 보기' : '집중 모드'}
+              </button>
+              <ActionButtons markdown={markdown} disabled={generationActive} />
+            </div>
           </div>
 
           <GenerationProgress events={generationEvents} active={generationActive} />
@@ -219,8 +302,13 @@ function App() {
               markdown={markdown}
               lineCount={markdownLineCount}
               onChange={setMarkdown}
+              onScrollElementReady={setEditorScrollElement}
             />
-            <MarkdownPreview markdown={markdown} lineCount={markdownLineCount} />
+            <MarkdownPreview
+              markdown={markdown}
+              lineCount={markdownLineCount}
+              onScrollElementReady={setPreviewScrollElement}
+            />
           </section>
         </section>
       </section>

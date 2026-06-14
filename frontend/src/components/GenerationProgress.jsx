@@ -21,16 +21,19 @@ const DEFAULT_STEPS = [
 ]
 
 function GenerationProgress({ events = [], active }) {
+  // 생성 중이 아닐 때는 진행 UI를 숨겨 편집 화면을 단순하게 유지
   if (!active) {
     return null
   }
 
+  // 같은 step의 이벤트가 여러 번 오면 가장 최신 상태만 progress 계산에 사용
   const latestByStep = events.reduce((stepMap, event) => {
     stepMap[event.step] = event
     return stepMap
   }, {})
   const latestEvent = events[events.length - 1]
   const currentStep = latestEvent?.step || 'start'
+  // warning은 fallback 진행처럼 사용자가 계속 작업할 수 있는 완료 상태로 계산
   const completedStepCount = DEFAULT_STEPS.filter((step) =>
     latestByStep[step]?.status === 'complete' || latestByStep[step]?.status === 'warning'
   ).length

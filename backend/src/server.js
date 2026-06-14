@@ -93,20 +93,17 @@ async function readJsonBody(request) {
 }
 
 function normalizeAiFeatures(features) {
-  if (Array.isArray(features)) {
-    const normalizedFeatures = features
-      .map((feature) => String(feature).trim())
-      .filter(Boolean)
+  // AI 응답 형태를 배열로 통일하고 유사 기능을 제거해 README 중복 출력 방지
+  const normalizedFeatures = splitFeatureItems(features)
+  const dedupedFeatures = dedupeFeatureItems(normalizedFeatures)
 
-    return normalizedFeatures.length > 0 ? normalizedFeatures : null
-  }
+  return dedupedFeatures.length > 0 ? dedupedFeatures : null
+}
 
-  if (typeof features === 'string') {
-    const trimmedFeatures = features.trim()
-    return trimmedFeatures || null
-  }
+function normalizeAiText(text) {
+  const normalizedText = typeof text === 'string' ? text.trim() : ''
 
-  return null
+  return normalizedText && normalizedText !== 'None' ? normalizedText : null
 }
 
 function splitFeatureItems(features) {
@@ -121,6 +118,142 @@ function splitFeatureItems(features) {
     .filter(Boolean)
 }
 
+function parseFeatureItem(feature) {
+  // "기능명: 설명" 형태를 비교 가능한 제목/설명 구조로 분리
+  const normalizedFeature = String(feature || '').replace(/^-+\s*/, '').trim()
+  const separatorIndex = normalizedFeature.search(/[:：]/)
+
+  if (separatorIndex === -1) {
+    return {
+      title: normalizedFeature,
+      description: '',
+      text: normalizedFeature,
+    }
+  }
+
+  return {
+    title: normalizedFeature.slice(0, separatorIndex).trim(),
+    description: normalizedFeature.slice(separatorIndex + 1).trim(),
+    text: normalizedFeature,
+  }
+}
+
+function normalizeComparableText(text) {
+  return String(text || '')
+    .toLowerCase()
+    .replace(/[^\p{L}\p{N}\s]/gu, ' ')
+    .replace(/\s+/g, ' ')
+    .trim()
+}
+
+const FEATURE_STOP_WORDS = new Set([
+  '기능',
+  '서비스',
+  '시스템',
+  '프로젝트',
+  '사용자',
+  '사용',
+  '다양한',
+  '유용한',
+  '기반',
+  '기반으로',
+  '정보',
+  '데이터',
+  '제공',
+  '지원',
+  '처리',
+])
+
+function normalizeComparableToken(word) {
+  return word
+    .replace(/(합니다|드립니다|해보세요|제공합니다|생성합니다|지원합니다)$/u, '')
+    .replace(/(하고|하거나|하며|하고요|하거나요)$/u, '')
+    .replace(/(을|를|이|가|은|는|에|에서|에게|으로|로|와|과|의)$/u, '')
+}
+
+function tokenizeComparableText(text) {
+  return normalizeComparableText(text)
+    .split(' ')
+    .map((word) => normalizeComparableToken(word))
+    .filter((word) => word.length >= 2)
+    .filter((word) => !FEATURE_STOP_WORDS.has(word))
+}
+
+function isTokenSubset(subsetTokens, supersetTokens) {
+  return [...subsetTokens].every((token) => supersetTokens.has(token))
+}
+
+function hasSimilarFeatureContent(currentFeature, previousFeature) {
+  // 제목/설명 완전 일치와 토큰 겹침을 함께 사용한 유사 기능 판정
+  const currentTitle = normalizeComparableText(currentFeature.title)
+  const previousTitle = normalizeComparableText(previousFeature.title)
+
+  if (currentTitle && currentTitle === previousTitle) {
+    return true
+  }
+
+  const currentDescription = normalizeComparableText(currentFeature.description)
+  const previousDescription = normalizeComparableText(previousFeature.description)
+
+  if (currentDescription && currentDescription === previousDescription) {
+    return true
+  }
+
+  const currentTitleTokens = new Set(tokenizeComparableText(currentFeature.title))
+  const previousTitleTokens = new Set(tokenizeComparableText(previousFeature.title))
+  const currentTokens = new Set(
+    tokenizeComparableText(`${currentFeature.title} ${currentFeature.description}`)
+  )
+  const previousTokens = new Set(
+    tokenizeComparableText(`${previousFeature.title} ${previousFeature.description}`)
+  )
+
+  if (currentTokens.size === 0 || previousTokens.size === 0) {
+    return false
+  }
+
+  if (
+    currentTitleTokens.size >= 2
+    && isTokenSubset(currentTitleTokens, previousTokens)
+  ) {
+    return true
+  }
+
+  if (
+    previousTitleTokens.size >= 2
+    && isTokenSubset(previousTitleTokens, currentTokens)
+  ) {
+    return true
+  }
+
+  const overlapCount = [...currentTokens].filter((token) => previousTokens.has(token)).length
+  const containmentSimilarity = overlapCount / Math.min(currentTokens.size, previousTokens.size)
+  const unionSize = new Set([...currentTokens, ...previousTokens]).size
+  const jaccardSimilarity = overlapCount / unionSize
+
+  return (
+    overlapCount >= 2
+    && (containmentSimilarity >= 0.75 || jaccardSimilarity >= 0.55)
+  )
+}
+
+function dedupeFeatureItems(features) {
+  const dedupedFeatures = []
+
+  for (const feature of features) {
+    const parsedFeature = parseFeatureItem(feature)
+    const isDuplicate = dedupedFeatures.some((previousFeature) =>
+      hasSimilarFeatureContent(parsedFeature, previousFeature)
+    )
+
+    if (!isDuplicate) {
+      dedupedFeatures.push(parsedFeature)
+    }
+  }
+
+  return dedupedFeatures.map((feature) => feature.text)
+}
+
 function createAiAnalysisReport(aiAnalysis, readmeData, selectedFileContents) {
   const analysis = readmeData.analysis || {}
   const repositoryAnalysis = readmeData.repositoryAnalysis || {}
@@ -129,7 +262,7 @@ function createAiAnalysisReport(aiAnalysis, readmeData, selectedFileContents) {
     : aiAnalysis.features
       ? [aiAnalysis.features]
       : analysis.detectedFeatures || []
-  const detectedFeatures = splitFeatureItems(rawDetectedFeatures)
+  const detectedFeatures = dedupeFeatureItems(splitFeatureItems(rawDetectedFeatures))
   const techStack = analysis.techStack || []
   const analyzedFiles = selectedFileContents.map((file) => {
     const selectionFile = repositoryAnalysis.files?.find(
@@ -151,6 +284,7 @@ function createAiAnalysisReport(aiAnalysis, readmeData, selectedFileContents) {
     usedAi: aiAnalysis.usedAi,
     fallbackUsed: aiAnalysis.fallbackUsed,
     message: aiAnalysis.message,
+    summary: aiAnalysis.summary || null,
     durationMs: aiAnalysis.durationMs,
     analyzedFileCount: analyzedFiles.length,
     analyzedFiles,
@@ -187,11 +321,15 @@ function githubErrorMessage(error) {
     return 'GitHub 저장소를 찾을 수 없습니다. owner/repo 이름과 공개 여부를 확인해주세요.'
   }
 
+  if (error.status === 409) {
+    return 'GitHub 저장소가 비어 있거나 기본 브랜치 파일 트리를 가져올 수 없습니다.'
+  }
+
   return `GitHub API 요청에 실패했습니다. (${error.status}) ${error.message}`
 }
 
 async function analyzeRepositoryWithAi(repoInfo, selectedFileContents) {
-  let description = repoInfo.description
+  let summary = normalizeAiText(repoInfo.description)
   let features = null
   const startedAt = Date.now()
   const fallbackMessage = 'AI 분석을 사용할 수 없어 Rule-based 분석 결과로 README를 구성했습니다.'
@@ -215,10 +353,8 @@ async function analyzeRepositoryWithAi(repoInfo, selectedFileContents) {
 
     if (aiResponse.ok) {
       const aiResult = await aiResponse.json()
-      description =
-        typeof aiResult.description === 'string' && aiResult.description.trim()
-          ? aiResult.description.trim()
-          : description
+      // description은 GitHub 원본 값을 유지하고, AI 요약은 README 상단 인용문에만 사용
+      summary = normalizeAiText(aiResult.summary) || summary
       features = normalizeAiFeatures(aiResult.features)
       status = 'success'
       message = 'AI 분석이 완료되었습니다.'
@@ -240,7 +376,7 @@ async function analyzeRepositoryWithAi(repoInfo, selectedFileContents) {
   }
 
   return {
-    description,
+    summary,
     features,
     status,
     usedAi: status === 'success',
@@ -383,7 +519,8 @@ async function generateReadmePayload(owner, repo, emitProgress = () => {}) {
 
   const analyzedRepoInfo = {
     ...repoInfo,
-    description: aiAnalysis.description,
+    summary: aiAnalysis.summary,
+    description: repoInfo.description,
   }
 
   emitProgress(createProgressEvent(

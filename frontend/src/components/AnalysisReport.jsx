@@ -15,6 +15,7 @@ const STATUS_DESCRIPTIONS = {
   fallback: '저장소 구조와 핵심 파일 기준으로 생성했습니다.',
 }
 
+// 백엔드에서 받은 ms 값을 UI에서 읽기 좋은 단위로 변환
 const formatDuration = (durationMs) => {
   if (!Number.isFinite(durationMs)) {
     return '-'
@@ -27,6 +28,7 @@ const formatDuration = (durationMs) => {
   return `${(durationMs / 1000).toFixed(1)}s`
 }
 
+// 중복되거나 빈 분석 항목을 제거하고 화면이 과하게 길어지지 않도록 개수를 제한
 const compactList = (items = [], limit = 6) =>
   Array.from(new Set(items
     .map((item) => String(item || '').trim())
@@ -34,6 +36,7 @@ const compactList = (items = [], limit = 6) =>
     .slice(0, limit)
 
 function AnalysisReport({ report }) {
+  // 리포트 전체 상세 보기와 파일 목록 더보기는 서로 독립된 UI 상태로 관리
   const [filesExpanded, setFilesExpanded] = useState(false)
   const [detailsOpen, setDetailsOpen] = useState(false)
 
@@ -43,6 +46,7 @@ function AnalysisReport({ report }) {
 
   const status = report.status || 'fallback'
   const detectedItems = report.detectedItems || {}
+  // 프로젝트 타입, 언어, 기술 스택처럼 빠르게 훑을 수 있는 값은 tag 형태로 표시
   const tagItems = compactList([
     detectedItems.projectType,
     detectedItems.primaryLanguage,
@@ -50,15 +54,8 @@ function AnalysisReport({ report }) {
     ...(detectedItems.buildTools || []),
     detectedItems.hasExistingReadme ? '기존 README' : null,
   ])
-  const features = compactList(
-    (detectedItems.features || []).flatMap((feature) =>
-      String(feature || '')
-        .split(/\r?\n/)
-        .map((line) => line.replace(/^-+\s*/, '').trim())
-    ),
-    5
-  )
   const allAnalyzedFiles = report.analyzedFiles || []
+  // 기본 화면은 핵심 파일만 보여주고, 사용자가 필요할 때 전체 목록을 펼침
   const visibleFileLimit = filesExpanded ? allAnalyzedFiles.length : 4
   const analyzedFiles = allAnalyzedFiles.slice(0, visibleFileLimit)
   const hasHiddenFiles = allAnalyzedFiles.length > visibleFileLimit
@@ -152,17 +149,6 @@ function AnalysisReport({ report }) {
                 ))}
               </div>
             </div>
-
-            {features.length > 0 && (
-              <div>
-                <h3>자동 감지된 주요 기능</h3>
-                <ul className="analysis-evidence">
-                  {features.map((feature) => (
-                    <li key={feature}>{feature}</li>
-                  ))}
-                </ul>
-              </div>
-            )}
           </div>
 
           <div className="analysis-files">

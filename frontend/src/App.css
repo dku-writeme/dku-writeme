@@ -78,22 +78,13 @@ button {
 }
 
 .brand-mark {
-  display: grid;
-  width: 58px;
-  height: 58px;
-  flex: 0 0 58px;
-  place-items: center;
-  border: 1px solid rgba(255, 255, 255, 0.65);
-  border-radius: 8px;
-  color: #ffffff;
-  background:
-    linear-gradient(145deg, rgba(255, 255, 255, 0.28), transparent 45%),
-    linear-gradient(145deg, #0b0b0f, #2d2d33 52%, var(--accent));
-  box-shadow:
-    inset 0 1px 0 rgba(255, 255, 255, 0.26),
-    0 18px 42px rgba(0, 122, 255, 0.22);
-  font-size: 26px;
-  font-weight: 800;
+  width: 64px;
+  height: 64px;
+  flex: 0 0 64px;
+  display: block;
+  object-fit: contain;
+  border-radius: 14px;
+  box-shadow: 0 18px 42px rgba(0, 122, 255, 0.2);
 }
 
 .eyebrow {
@@ -156,6 +147,7 @@ button {
 }
 
 .workspace-shell {
+  position: relative;
   display: grid;
   grid-template-columns: 370px minmax(0, 1fr);
   min-height: 690px;
@@ -165,6 +157,11 @@ button {
   background: var(--surface);
   box-shadow: var(--shadow);
   backdrop-filter: blur(28px) saturate(180%);
+  transform-origin: center;
+  transition:
+    grid-template-columns 260ms cubic-bezier(0.22, 1, 0.36, 1),
+    border-radius 260ms cubic-bezier(0.22, 1, 0.36, 1),
+    box-shadow 260ms cubic-bezier(0.22, 1, 0.36, 1);
 }
 
 .control-rail {
@@ -176,6 +173,10 @@ button {
   background:
     linear-gradient(180deg, rgba(255, 255, 255, 0.78), rgba(244, 244, 247, 0.7)),
     var(--surface-soft);
+  overflow: hidden;
+  transition:
+    opacity 160ms ease,
+    padding 220ms ease;
 }
 
 .rail-section,
@@ -409,10 +410,15 @@ button {
 .workspace-main {
   display: grid;
   min-width: 0;
-  grid-template-rows: auto minmax(0, 1fr);
+  grid-template-rows: auto auto auto minmax(0, 1fr);
   gap: 16px;
   padding: 22px;
   background: rgba(255, 255, 255, 0.72);
+  transform-origin: center;
+  transition:
+    gap 260ms cubic-bezier(0.22, 1, 0.36, 1),
+    padding 260ms cubic-bezier(0.22, 1, 0.36, 1),
+    background 260ms cubic-bezier(0.22, 1, 0.36, 1);
 }
 
 .workspace-toolbar {
@@ -427,6 +433,127 @@ button {
 
 .workspace-toolbar h2 {
   font-size: 22px;
+}
+
+.workspace-actions {
+  display: flex;
+  align-items: center;
+  flex: 0 0 auto;
+  flex-wrap: wrap;
+  justify-content: flex-end;
+  gap: 10px;
+}
+
+.scroll-sync-toggle {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  min-height: 40px;
+  padding: 0 12px;
+  border: 1px solid var(--line-strong);
+  border-radius: 8px;
+  color: var(--ink);
+  background: rgba(255, 255, 255, 0.76);
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.72);
+  cursor: pointer;
+  user-select: none;
+}
+
+.scroll-sync-toggle input {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  overflow: hidden;
+  clip: rect(0 0 0 0);
+  white-space: nowrap;
+}
+
+.scroll-sync-toggle span {
+  position: relative;
+  width: 34px;
+  height: 20px;
+  flex: 0 0 34px;
+  border: 1px solid var(--line-strong);
+  border-radius: 999px;
+  background: rgba(120, 120, 128, 0.18);
+  transition:
+    background 140ms ease,
+    border-color 140ms ease;
+}
+
+.scroll-sync-toggle span::after {
+  position: absolute;
+  top: 2px;
+  left: 2px;
+  width: 14px;
+  height: 14px;
+  border-radius: 50%;
+  background: #ffffff;
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.24);
+  content: "";
+  transition: transform 140ms ease;
+}
+
+.scroll-sync-toggle strong {
+  font-size: 13px;
+  font-weight: 800;
+  white-space: nowrap;
+}
+
+.scroll-sync-toggle:has(input:checked) {
+  border-color: rgba(0, 122, 255, 0.22);
+  color: var(--accent-strong);
+  background: rgba(0, 122, 255, 0.08);
+}
+
+.scroll-sync-toggle:has(input:checked) span {
+  border-color: var(--accent);
+  background: var(--accent);
+}
+
+.scroll-sync-toggle:has(input:checked) span::after {
+  transform: translateX(14px);
+}
+
+.scroll-sync-toggle:has(input:focus-visible) {
+  outline: 3px solid rgba(0, 122, 255, 0.14);
+  outline-offset: 2px;
+}
+
+.focus-mode-button {
+  display: inline-flex;
+  min-height: 40px;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  padding: 0 12px;
+  border: 1px solid var(--line-strong);
+  border-radius: 8px;
+  color: var(--ink);
+  background: rgba(255, 255, 255, 0.76);
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.72);
+  cursor: pointer;
+  font-size: 13px;
+  font-weight: 800;
+  white-space: nowrap;
+}
+
+.focus-mode-button:hover,
+.focus-mode-button[aria-pressed="true"] {
+  border-color: rgba(0, 122, 255, 0.28);
+  color: var(--accent-strong);
+  background: rgba(0, 122, 255, 0.08);
+}
+
+.focus-mode-button:focus-visible {
+  outline: 3px solid rgba(0, 122, 255, 0.14);
+  outline-offset: 2px;
+}
+
+.focus-mode-button svg {
+  width: 18px;
+  height: 18px;
+  flex: 0 0 18px;
 }
 
 .action-buttons {
@@ -964,21 +1091,128 @@ button {
 
 .markdown-workspace {
   display: grid;
+  height: clamp(560px, calc(100vh - 282px), 820px);
   min-height: 0;
   grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
   gap: 14px;
+  transform-origin: center;
+  transition:
+    height 320ms cubic-bezier(0.22, 1, 0.36, 1),
+    gap 240ms cubic-bezier(0.22, 1, 0.36, 1);
+}
+
+.app-editor-focus {
+  width: 100%;
+  min-height: 100vh;
+  padding: 0;
+}
+
+.app-editor-focus .app-header,
+.app-editor-focus .control-rail,
+.app-editor-focus .generation-progress,
+.app-editor-focus .analysis-report {
+  display: none;
+}
+
+.app-editor-focus .workspace-shell {
+  min-height: 100vh;
+  border: 0;
+  border-radius: 0;
+  grid-template-columns: minmax(0, 1fr);
+  box-shadow: none;
+  animation: focusShellExpand 320ms cubic-bezier(0.22, 1, 0.36, 1);
+}
+
+.app-editor-focus .workspace-main {
+  min-height: 100vh;
+  grid-template-rows: auto minmax(0, 1fr);
+  gap: 12px;
+  padding: 16px;
+  background: rgba(255, 255, 255, 0.86);
+  animation: focusContentRise 360ms cubic-bezier(0.22, 1, 0.36, 1);
+}
+
+.app-editor-focus .workspace-toolbar {
+  padding-bottom: 12px;
+}
+
+.app-editor-focus .markdown-workspace {
+  height: calc(100vh - 94px);
+  grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
+  gap: 16px;
+  animation: focusWorkspaceGrow 380ms cubic-bezier(0.22, 1, 0.36, 1);
 }
 
 .markdown-editor,
 .markdown-preview {
   display: flex;
   min-width: 0;
-  min-height: 560px;
+  min-height: 0;
   flex-direction: column;
   border: 1px solid rgba(60, 60, 67, 0.14);
   border-radius: 8px;
   background: rgba(255, 255, 255, 0.82);
   box-shadow: 0 8px 26px rgba(0, 0, 0, 0.045);
+  transform-origin: center;
+  transition:
+    border-color 220ms ease,
+    box-shadow 260ms cubic-bezier(0.22, 1, 0.36, 1),
+    transform 260ms cubic-bezier(0.22, 1, 0.36, 1);
+}
+
+.app-editor-focus .markdown-editor,
+.app-editor-focus .markdown-preview {
+  box-shadow: 0 18px 44px rgba(0, 0, 0, 0.08);
+}
+
+@keyframes focusShellExpand {
+  from {
+    border-radius: 18px;
+    transform: scale(0.985);
+  }
+
+  to {
+    border-radius: 0;
+    transform: scale(1);
+  }
+}
+
+@keyframes focusContentRise {
+  from {
+    opacity: 0.82;
+    transform: translateY(10px) scale(0.992);
+  }
+
+  to {
+    opacity: 1;
+    transform: translateY(0) scale(1);
+  }
+}
+
+@keyframes focusWorkspaceGrow {
+  from {
+    opacity: 0.72;
+    transform: scale(0.965);
+  }
+
+  to {
+    opacity: 1;
+    transform: scale(1);
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .workspace-shell,
+  .workspace-main,
+  .markdown-workspace,
+  .markdown-editor,
+  .markdown-preview,
+  .app-editor-focus .workspace-shell,
+  .app-editor-focus .workspace-main,
+  .app-editor-focus .markdown-workspace {
+    animation: none;
+    transition-duration: 0.01ms;
+  }
 }
 
 .markdown-editor {
@@ -1023,6 +1257,7 @@ button {
 .editor-toolbar {
   display: flex;
   align-items: center;
+  flex-wrap: wrap;
   gap: 6px;
   min-height: 52px;
   padding: 8px 10px;
@@ -1066,6 +1301,90 @@ button {
   flex: 0 0 36px;
 }
 
+.editor-format-menu {
+  position: relative;
+  flex: 0 0 auto;
+}
+
+.editor-toolbar .editor-format-button {
+  display: flex;
+  width: auto;
+  min-width: 58px;
+  padding: 0 8px;
+  gap: 5px;
+  font-size: 12px;
+  font-weight: 800;
+}
+
+.editor-format-button span {
+  line-height: 1;
+}
+
+.editor-format-options {
+  position: absolute;
+  z-index: 35;
+  top: calc(100% + 8px);
+  left: 0;
+  width: 212px;
+  overflow: hidden;
+  border: 1px solid var(--line-strong);
+  border-radius: 8px;
+  background: rgba(255, 255, 255, 0.96);
+  box-shadow: var(--shadow-soft);
+  color: var(--ink);
+  backdrop-filter: blur(18px) saturate(180%);
+}
+
+.editor-toolbar .editor-format-options button {
+  display: grid;
+  width: 100%;
+  height: 38px;
+  flex: initial;
+  grid-template-columns: 22px minmax(0, 1fr);
+  align-items: center;
+  justify-items: start;
+  gap: 9px;
+  padding: 0 12px;
+  border: 0;
+  border-radius: 0;
+  color: #3a3a3c;
+  background: transparent;
+  font-size: 14px;
+  font-weight: 800;
+}
+
+.editor-toolbar .editor-format-options button:hover,
+.editor-toolbar .editor-format-options button:focus-visible {
+  color: var(--accent-strong);
+  background: var(--accent-soft);
+  outline: 0;
+}
+
+.editor-format-options svg {
+  width: 16px;
+  height: 16px;
+}
+
+.format-glyph {
+  color: currentColor;
+  font-size: 15px;
+  font-weight: 850;
+  line-height: 1;
+}
+
+.format-glyph-italic {
+  font-style: italic;
+}
+
+.format-glyph-underline {
+  text-decoration: underline;
+  text-underline-offset: 4px;
+}
+
+.format-glyph-strike {
+  text-decoration: line-through;
+}
+
 .editor-heading-options {
   position: absolute;
   z-index: 30;
@@ -1096,25 +1415,17 @@ button {
   letter-spacing: 0;
 }
 
-.editor-snippet-picker {
+.editor-snippet-menu {
   position: relative;
-  flex: 0 0 132px;
+  flex: 0 0 auto;
   margin-left: 4px;
 }
 
-.editor-snippet-picker span {
-  position: absolute;
-  width: 1px;
-  height: 1px;
-  overflow: hidden;
-  clip: rect(0 0 0 0);
-  white-space: nowrap;
-}
-
-.editor-snippet-picker select {
-  width: 100%;
+.editor-toolbar .editor-snippet-button {
+  width: auto;
+  min-width: 90px;
   height: 36px;
-  padding: 0 30px 0 12px;
+  padding: 0 12px;
   border: 1px solid var(--line);
   border-radius: 8px;
   color: var(--ink);
@@ -1122,24 +1433,79 @@ button {
   box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.7);
   font-size: 13px;
   font-weight: 750;
-  cursor: pointer;
 }
 
-.editor-snippet-picker select:focus {
-  border-color: var(--accent);
-  outline: 3px solid rgba(0, 122, 255, 0.14);
+.editor-snippet-options {
+  position: absolute;
+  z-index: 35;
+  top: calc(100% + 8px);
+  right: 0;
+  width: 236px;
+  max-height: min(470px, calc(100vh - 240px));
+  overflow: auto;
+  padding: 6px 0;
+  border: 1px solid var(--line-strong);
+  border-radius: 8px;
+  background: rgba(255, 255, 255, 0.96);
+  box-shadow: var(--shadow-soft);
+  color: var(--ink);
+  backdrop-filter: blur(18px) saturate(180%);
+}
+
+.editor-snippet-group + .editor-snippet-group {
+  margin-top: 4px;
+  padding-top: 4px;
+  border-top: 1px solid var(--line);
+}
+
+.editor-snippet-group p {
+  margin: 0;
+  padding: 7px 12px 4px;
+  color: var(--muted);
+  font-size: 11px;
+  font-weight: 850;
+}
+
+.editor-toolbar .editor-snippet-options button {
+  display: flex;
+  width: 100%;
+  height: 34px;
+  flex: initial;
+  align-items: center;
+  justify-content: flex-start;
+  padding: 0 12px;
+  border: 0;
+  border-radius: 0;
+  color: #3a3a3c;
+  background: transparent;
+  font-size: 14px;
+  font-weight: 800;
+  text-align: left;
+}
+
+.editor-toolbar .editor-snippet-options button:hover,
+.editor-toolbar .editor-snippet-options button:focus-visible {
+  color: var(--accent-strong);
+  background: var(--accent-soft);
+  outline: 0;
+}
+
+.editor-snippet-options span {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
 .markdown-code-editor {
   flex: 1;
-  min-height: 520px;
+  min-height: 0;
   background: rgba(255, 255, 255, 0.78);
   overflow: hidden;
 }
 
 .markdown-code-editor .cm-editor {
   height: 100%;
-  min-height: 520px;
+  min-height: 0;
   color: #1d1d1f;
   background: transparent;
   font-family:
@@ -1153,7 +1519,7 @@ button {
 }
 
 .markdown-code-editor .cm-scroller {
-  min-height: 520px;
+  min-height: 0;
   overflow: auto;
   font-family:
     "SFMono-Regular", Consolas, "Liberation Mono", ui-monospace, monospace;
@@ -1216,7 +1582,7 @@ button {
 
 .markdown-preview-content {
   flex: 1;
-  min-height: 520px;
+  min-height: 0;
   overflow: auto;
   padding: 22px;
   color: #1d1d1f;
@@ -1295,9 +1661,13 @@ button {
 .markdown-preview-content table {
   width: 100%;
   overflow: hidden;
-  border-collapse: collapse;
+  margin: 14px 0 20px;
+  border-collapse: separate;
+  border-spacing: 0;
   border: 1px solid var(--line);
   border-radius: 8px;
+  background: rgba(255, 255, 255, 0.72);
+  font-size: 14px;
 }
 
 .markdown-preview-content del {
@@ -1310,13 +1680,39 @@ button {
 
 .markdown-preview-content th,
 .markdown-preview-content td {
-  padding: 10px 12px;
+  padding: 11px 13px;
   border-bottom: 1px solid var(--line);
   text-align: left;
+  vertical-align: top;
+}
+
+.markdown-preview-content th + th,
+.markdown-preview-content td + td {
+  border-left: 1px solid var(--line);
 }
 
 .markdown-preview-content th {
-  background: rgba(0, 122, 255, 0.08);
+  color: #3a3a3c;
+  background: rgba(0, 122, 255, 0.07);
+  font-size: 12px;
+  font-weight: 850;
+  text-transform: uppercase;
+}
+
+.markdown-preview-content tr:last-child td {
+  border-bottom: 0;
+}
+
+.markdown-preview-content td:first-child {
+  width: 42%;
+  white-space: nowrap;
+}
+
+.markdown-preview-content td:first-child code {
+  display: inline-block;
+  max-width: 100%;
+  overflow-wrap: anywhere;
+  white-space: normal;
 }
 
 .preview-empty {
@@ -1387,6 +1783,7 @@ button {
 
   .markdown-workspace {
     grid-template-columns: 1fr;
+    height: auto;
   }
 
   .analysis-summary {
@@ -1403,14 +1800,14 @@ button {
   .brand-lockup {
     align-items: flex-start;
     display: grid;
-    grid-template-columns: 48px minmax(0, 1fr);
+    grid-template-columns: 52px minmax(0, 1fr);
     width: 100%;
   }
 
   .brand-mark {
-    width: 48px;
-    height: 48px;
-    font-size: 22px;
+    width: 52px;
+    height: 52px;
+    border-radius: 12px;
   }
 
   .header-stats,
@@ -1428,9 +1825,20 @@ button {
     flex-direction: column;
   }
 
+  .workspace-actions {
+    align-items: stretch;
+    justify-content: stretch;
+  }
+
+  .scroll-sync-toggle {
+    width: 100%;
+    justify-content: space-between;
+  }
+
   .action-buttons {
     display: grid;
     grid-template-columns: 1fr 1fr;
+    width: 100%;
   }
 
   .action-buttons button {
@@ -1484,13 +1892,13 @@ button {
 
   .markdown-editor,
   .markdown-preview {
-    min-height: 480px;
+    min-height: 520px;
   }
 
   .markdown-code-editor,
   .markdown-code-editor .cm-editor,
   .markdown-code-editor .cm-scroller,
   .markdown-preview-content {
-    min-height: 440px;
+    min-height: 0;
   }
 }
