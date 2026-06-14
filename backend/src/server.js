@@ -100,6 +100,12 @@ function normalizeAiFeatures(features) {
   return dedupedFeatures.length > 0 ? dedupedFeatures : null
 }
 
+function normalizeAiText(text) {
+  const normalizedText = typeof text === 'string' ? text.trim() : ''
+
+  return normalizedText && normalizedText !== 'None' ? normalizedText : null
+}
+
 function splitFeatureItems(features) {
   const featureItems = Array.isArray(features) ? features : [features]
 
@@ -278,6 +284,7 @@ function createAiAnalysisReport(aiAnalysis, readmeData, selectedFileContents) {
     usedAi: aiAnalysis.usedAi,
     fallbackUsed: aiAnalysis.fallbackUsed,
     message: aiAnalysis.message,
+    summary: aiAnalysis.summary || null,
     durationMs: aiAnalysis.durationMs,
     analyzedFileCount: analyzedFiles.length,
     analyzedFiles,
@@ -323,6 +330,7 @@ function githubErrorMessage(error) {
 
 async function analyzeRepositoryWithAi(repoInfo, selectedFileContents) {
   let description = repoInfo.description
+  let summary = normalizeAiText(repoInfo.description)
   let features = null
   const startedAt = Date.now()
   const fallbackMessage = 'AI 분석을 사용할 수 없어 Rule-based 분석 결과로 README를 구성했습니다.'
@@ -346,10 +354,9 @@ async function analyzeRepositoryWithAi(repoInfo, selectedFileContents) {
 
     if (aiResponse.ok) {
       const aiResult = await aiResponse.json()
-      description =
-        typeof aiResult.description === 'string' && aiResult.description.trim()
-          ? aiResult.description.trim()
-          : description
+      // README 상단 인용문은 별도 요약을 우선 사용하고, description은 기존 의미 유지
+      summary = normalizeAiText(aiResult.summary) || summary
+      description = normalizeAiText(aiResult.description) || description
       features = normalizeAiFeatures(aiResult.features)
       status = 'success'
       message = 'AI 분석이 완료되었습니다.'
@@ -371,6 +378,7 @@ async function analyzeRepositoryWithAi(repoInfo, selectedFileContents) {
   }
 
   return {
+    summary,
     description,
     features,
     status,
@@ -514,7 +522,8 @@ async function generateReadmePayload(owner, repo, emitProgress = () => {}) {
 
   const analyzedRepoInfo = {
     ...repoInfo,
-    description: aiAnalysis.description,
+    summary: aiAnalysis.summary,
+    description: repoInfo.description,
   }
 
   emitProgress(createProgressEvent(

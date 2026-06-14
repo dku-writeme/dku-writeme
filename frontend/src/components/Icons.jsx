@@ -122,3 +122,25 @@ export function ImageIcon(props) {
     </IconBase>
   )
 }
+
+export function MaximizeIcon(props) {
+  return (
+    <IconBase {...props}>
+      <path d="M8 3H3v5" />
+      <path d="M16 3h5v5" />
+      <path d="M21 16v5h-5" />
+      <path d="M3 16v5h5" />
+    </IconBase>
+  )
+}
+
+export function MinimizeIcon(props) {
+  return (
+    <IconBase {...props}>
+      <path d="M8 3v5H3" />
+      <path d="M16 3v5h5" />
+      <path d="M21 16h-5v5" />
+      <path d="M3 16h5v5" />
+    </IconBase>
+  )
+}

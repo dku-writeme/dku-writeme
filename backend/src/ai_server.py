@@ -26,6 +26,14 @@ client = InferenceClient(
 
 DISALLOWED_LANGUAGE_PATTERN = re.compile(r'[\u4e00-\u9fff\u3040-\u30ff\u0400-\u04ff]')
 MAX_AI_RETRIES = 2
+TECH_TERM_REPLACEMENTS = [
+    (re.compile(r'리액트'), 'React'),
+    (re.compile(r'비타'), 'Vite'),
+    (re.compile(r'노드\.?js', re.IGNORECASE), 'Node.js'),
+    (re.compile(r'자바스크립트'), 'JavaScript'),
+    (re.compile(r'타입스크립트'), 'TypeScript'),
+    (re.compile(r'패스트API', re.IGNORECASE), 'FastAPI'),
+]
 
 # 입력 데이터 형식 정의
 class AnalyzeRequest(BaseModel):
@@ -36,6 +44,9 @@ class AnalyzeRequest(BaseModel):
 def clean_response(text):
     # 따옴표 제거
     text = text.strip('"').strip("'")
+    # 기술명은 README에서 통용되는 원문 표기를 유지
+    for pattern, replacement in TECH_TERM_REPLACEMENTS:
+        text = pattern.sub(replacement, text)
     # 환각 키워드 감지
     hallucination_keywords = ["예측", "트렌드", "SMS", "email", "향후", "잠재적"]
     for keyword in hallucination_keywords:
@@ -55,7 +66,9 @@ def call_ai(prompt):
         {
             "role": "system",
             "content": (
-                "당신은 코드 분석 전문가입니다. 모든 답변은 반드시 완성된 한국어 문장으로만 작성하세요. "
+                "당신은 코드 분석 전문가입니다. 모든 답변은 반드시 자연스러운 한국어 문장으로 작성하세요. "
+                "프레임워크, 라이브러리, 런타임, 언어, API, 패키지 이름은 입력에 나온 원문 영어 표기를 유지하세요. "
+                "예: React, Vite, Node.js, TypeScript, FastAPI를 리액트, 비타, 노드, 타입스크립트처럼 한글로 바꾸지 마세요. "
                 "중국어, 일본어, 러시아어, 한자 문자는 절대 사용하지 마세요. "
                 "금지 문자 예시: 的, 是, 了, 项, 目, 功, 能, 系, 统, 語, 中."
             )
@@ -88,7 +101,8 @@ def call_ai(prompt):
                 "role": "user",
                 "content": (
                     "방금 답변에 중국어/일본어/한자 문자가 포함되었습니다. "
-                    "해당 문자를 모두 제거하고, 같은 내용을 한국어로만 다시 작성하세요."
+                    "해당 문자를 모두 제거하고, 같은 내용을 한국어 문장으로 다시 작성하세요. "
+                    "단, 기술명과 라이브러리명은 원문 영어 표기를 유지하세요."
                 )
             })
 
@@ -98,20 +112,28 @@ def call_ai(prompt):
 async def analyze(req: AnalyzeRequest):
     context = json.dumps(req.model_dump(), indent=2, ensure_ascii=False)
 
-    # 질문 1. 프로젝트 설명 (description 없을 때만 AI 사용)
+    # 질문 1. README 상단 인용문용 한 줄 요약 생성
+    prompt_summary = f"""아래는 GitHub 저장소의 파일 목록과 내용입니다.
+    [데이터]
+    {context}
+    README 제목 아래 인용문에 들어갈 한 줄 요약을 작성하시오.
+    [출력 규칙 - 반드시 준수]
+    - 마크다운 없이 순수 텍스트 한 문장으로만 출력
+    - 프로젝트가 제공하는 핵심 가치나 해결하는 문제 중심으로 작성
+    - 프로젝트명, 파일명, 함수명, 변수명 반복 금지
+    - 코드에서 확인된 것만 작성하고 추측 금지
+    - 입력 데이터에 중국어/일본어/한자가 있어도 출력에는 절대 포함하지 말 것
+    - 한국어 문장으로 작성하되 기술명, 라이브러리명, 프레임워크명은 원문 영어 표기 유지
+    - React, Vite, Node.js, TypeScript 같은 기술명을 한글로 음역하지 말 것"""
+    try:
+        summary = call_ai(prompt_summary)
+    except ValueError as error:
+        raise HTTPException(status_code=422, detail=str(error)) from error
+
+    # 기존 description은 신뢰 가능한 경우 유지하고, 없을 때만 AI 요약으로 보완
     if not req.description or req.description in ("None", "") or has_disallowed_language(req.description):
-        print("💡 [INFO] description이 없거나 비한국어 문자가 포함되어 있습니다. ➡️ AI 분석을 호출합니다.")
-        prompt_desc = f"""아래는 GitHub 저장소의 파일 목록과 내용입니다.
-        [데이터]
-        {context}
-        이 프로그램을 한 줄로 설명하시오.
-        - 마크다운 없이 순수 텍스트 한 문장으로만 출력
-        - 입력 데이터에 중국어/일본어/한자가 있어도 출력에는 절대 포함하지 말 것
-        - 한국어만 사용"""
-        try:
-            description = call_ai(prompt_desc)
-        except ValueError as error:
-            raise HTTPException(status_code=422, detail=str(error)) from error
+        print("💡 [INFO] description이 없거나 비한국어 문자가 포함되어 있습니다. ➡️ AI 요약으로 보완합니다.")
+        description = summary
     else:
         print(f"✅ [INFO] 기존 description이 존재합니다. AI를 사용하지 않고 기존 데이터를 유지합니다.")
         print(f"   (기존 내용: {req.description[:30]}...)")
@@ -121,13 +143,14 @@ async def analyze(req: AnalyzeRequest):
     prompt_features = f"""아래는 GitHub 저장소의 파일 목록과 내용입니다.
     [데이터]
     {context}
-    이 프로그램의 주요 기능을 2~7가지로 작성하시오.
+    이 프로그램의 주요 기능을 2~6가지로 작성하시오.
     [출력 규칙 - 반드시 준수]
     - 형식: "- 기능명: 설명" 한 줄로만
     - 설명은 20자 이내로 간결하게
     - 파일명, 함수명, 변수명 언급 금지
     - 사용자 관점에서 "무엇을 하는가"만 작성
-    - 한국어만 사용
+    - 한국어 문장으로 작성하되 기술명, 라이브러리명, 프레임워크명은 원문 영어 표기 유지
+    - React, Vite, Node.js, TypeScript 같은 기술명을 한글로 음역하지 말 것
     - 코드에서 확인된 것만, 추측 금지
     - 코드에 없는 기능은 절대 작성하지 말 것
     - 확인되지 않은 기능은 목록에서 제외할 것
@@ -157,12 +180,15 @@ async def analyze(req: AnalyzeRequest):
     print("\n" + "="*40)
     print("🚀 [AI SERVER] analyze 함수 반환 값 확인")
     print("="*40)
+    print(f"💬 Summary:\n{summary}")
+    print("-"*40)
     print(f"📝 Description:\n{description}")
     print("-"*40)
     print(f"⚡ Features:\n{features}")
     print("="*40 + "\n")
 
     return {
+        "summary": summary,
         "description": description,
         "features": features
     }

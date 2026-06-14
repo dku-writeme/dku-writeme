@@ -60,12 +60,43 @@ function getStructurePaths(files) {
     }))
 }
 
+function getEnvExamplePaths(files) {
+  return files
+    .filter((file) => /(^|\/)\.env(\.[\w-]+)?\.(example|sample|template)$/.test(file.path))
+    .map((file) => file.path)
+    .sort((left, right) => left.localeCompare(right))
+}
+
+function getDockerFiles(files) {
+  return files
+    .filter((file) => /(^|\/)Dockerfile$/.test(file.path))
+    .map((file) => file.path)
+    .sort((left, right) => left.localeCompare(right))
+}
+
+function getDockerComposeFiles(files) {
+  return files
+    .filter((file) => /(^|\/)docker-compose\.ya?ml$/.test(file.path))
+    .map((file) => file.path)
+    .sort((left, right) => left.localeCompare(right))
+}
+
 function findFileByName(fileContents, filename) {
   // 조회된 파일 내용 목록에서 파일명과 일치하는 파일을 찾음
   return fileContents.find((file) => {
     const currentFilename = file.path.split('/').pop().toLowerCase()
     return currentFilename === filename
   })
+}
+
+function getFileDirectory(path = '') {
+  const segments = path.split('/').filter(Boolean)
+
+  if (segments.length <= 1) {
+    return '.'
+  }
+
+  return segments.slice(0, -1).join('/')
 }
 
 function isReadmeFile(file) {
@@ -195,6 +226,32 @@ function parsePackageJson(fileContents) {
     console.error('package.json 분석 중 오류가 발생했습니다: ', error)
     return null
   }
+}
+
+function parsePackageContexts(fileContents) {
+  return fileContents
+    .filter((file) => file.path.split('/').pop().toLowerCase() === 'package.json')
+    .map((file) => {
+      try {
+        const packageJson = JSON.parse(file.content)
+
+        return {
+          dir: getFileDirectory(file.path),
+          name: packageJson.name || null,
+          scripts: packageJson.scripts || {},
+          dependencies: Object.keys(packageJson.dependencies || {}),
+          devDependencies: Object.keys(packageJson.devDependencies || {}),
+          dependencyVersions: {
+            ...(packageJson.dependencies || {}),
+            ...(packageJson.devDependencies || {}),
+          },
+        }
+      } catch (error) {
+        console.error(`${file.path} 분석 중 오류가 발생했습니다: `, error)
+        return null
+      }
+    })
+    .filter(Boolean)
 }
 
 function hasFile(files, filename) {
@@ -335,7 +392,242 @@ function detectProjectType(files, techStack) {
   return 'Unknown'
 }
 
-function detectCommands(files, packageJson, techStack) {
+function isPathInDirectory(path, dir) {
+  return dir === '.' || path === dir || path.startsWith(`${dir}/`)
+}
+
+function hasFileInDirectory(files, dir, filename) {
+  return files.some((file) =>
+    getFileDirectory(file.path) === dir && file.path.split('/').pop() === filename
+  )
+}
+
+function findFileInDirectory(files, dir, filenamePattern) {
+  return files.find((file) =>
+    getFileDirectory(file.path) === dir && filenamePattern.test(file.path.split('/').pop())
+  )
+}
+
+function detectNodePackageManager(files, dir) {
+  if (hasFileInDirectory(files, dir, 'pnpm-lock.yaml')) return 'pnpm'
+  if (hasFileInDirectory(files, dir, 'yarn.lock')) return 'yarn'
+  if (hasFileInDirectory(files, dir, 'bun.lockb') || hasFileInDirectory(files, dir, 'bun.lock')) return 'bun'
+  return 'npm'
+}
+
+function nodeInstallCommand(packageManager) {
+  if (packageManager === 'pnpm') return 'pnpm install'
+  if (packageManager === 'yarn') return 'yarn install'
+  if (packageManager === 'bun') return 'bun install'
+  return 'npm install'
+}
+
+function nodeScriptCommand(packageManager, scriptName) {
+  if (!scriptName) return null
+  if (packageManager === 'pnpm') return `pnpm ${scriptName}`
+  if (packageManager === 'yarn') return `yarn ${scriptName}`
+  if (packageManager === 'bun') return `bun run ${scriptName}`
+  return scriptName === 'start' ? 'npm start' : `npm run ${scriptName}`
+}
+
+function getNodeScriptCommand(packageManager, scripts, scriptNames) {
+  const scriptName = scriptNames.find((name) => scripts?.[name])
+  return nodeScriptCommand(packageManager, scriptName)
+}
+
+function getCommandGroupLabel(context, type, appInfo = null) {
+  const topLevelDir = context.dir.split('/')[0]
+
+  if (type === 'python' && appInfo?.framework === 'FastAPI' && /(^|\/|_)ai/i.test(appInfo.path)) {
+    return 'AI Server'
+  }
+
+  if (context.dir === '.') {
+    return type === 'python' ? 'Python' : '루트'
+  }
+
+  if (topLevelDir === 'frontend') {
+    return 'Frontend'
+  }
+
+  if (topLevelDir === 'backend') {
+    return type === 'python' ? 'Backend Python' : 'Backend API'
+  }
+
+  return context.name || context.dir
+}
+
+function createNodeCommandGroups(packageContexts, files) {
+  // 여러 package.json이 있는 저장소는 폴더별 실행 컨텍스트를 분리해 README에 전달함
+  return packageContexts.map((context) => {
+    const packageManager = detectNodePackageManager(files, context.dir)
+
+    return {
+      type: 'node',
+      label: getCommandGroupLabel(context, 'node'),
+      dir: context.dir,
+      packageManager,
+      install: [nodeInstallCommand(packageManager)],
+      run: [getNodeScriptCommand(packageManager, context.scripts, ['dev', 'start', 'serve'])].filter(Boolean),
+      build: [getNodeScriptCommand(packageManager, context.scripts, ['build'])].filter(Boolean),
+      test: [getNodeScriptCommand(packageManager, context.scripts, ['test'])].filter(Boolean),
+    }
+  })
+}
+
+function getPythonModulePath(filePath, dir) {
+  const relativePath = dir === '.' ? filePath : filePath.slice(dir.length + 1)
+  return relativePath.replace(/\.py$/, '').replace(/\//g, '.')
+}
+
+function getPythonRunPath(filePath, dir) {
+  return dir === '.' ? filePath : filePath.slice(dir.length + 1)
+}
+
+function findPythonAppInfo(selectedFileContents, dir) {
+  const pythonFiles = selectedFileContents.filter((file) =>
+    file.path.endsWith('.py') && isPathInDirectory(file.path, dir)
+  )
+  const fastApiFile = pythonFiles.find((file) => /FastAPI\s*\(/.test(file.content))
+
+  if (fastApiFile) {
+    const appName = fastApiFile.content.match(/(?:^|\n)\s*([A-Za-z_]\w*)\s*=\s*FastAPI\s*\(/)?.[1] || 'app'
+    return {
+      framework: 'FastAPI',
+      path: fastApiFile.path,
+      command: `uvicorn ${getPythonModulePath(fastApiFile.path, dir)}:${appName} --reload --port 8000`,
+    }
+  }
+
+  const flaskFile = pythonFiles.find((file) => /Flask\s*\(/.test(file.content))
+
+  if (flaskFile) {
+    return {
+      framework: 'Flask',
+      path: flaskFile.path,
+      command: `flask --app ${getPythonModulePath(flaskFile.path, dir)} run`,
+    }
+  }
+
+  const managePy = pythonFiles.find((file) => file.path.endsWith('/manage.py') || file.path === 'manage.py')
+
+  if (managePy) {
+    return {
+      framework: 'Django',
+      path: managePy.path,
+      command: `python ${getPythonRunPath(managePy.path, dir)} runserver`,
+    }
+  }
+
+  const entrypoint = pythonFiles.find((file) =>
+    /(^|\/)(main|app|server|run)\.py$/.test(file.path)
+  )
+
+  if (entrypoint) {
+    return {
+      framework: 'Python',
+      path: entrypoint.path,
+      command: `python ${getPythonRunPath(entrypoint.path, dir)}`,
+    }
+  }
+
+  return null
+}
+
+function getPythonDependencyContexts(files) {
+  const contextDirs = new Set()
+
+  files.forEach((file) => {
+    const filename = file.path.split('/').pop()
+
+    if (/^(requirements.*\.txt|pyproject\.toml|Pipfile|setup\.py)$/.test(filename)) {
+      contextDirs.add(getFileDirectory(file.path))
+    }
+  })
+
+  return Array.from(contextDirs).map((dir) => ({ dir }))
+}
+
+function getPythonInstallCommands(files, dir) {
+  const requirementsFile = findFileInDirectory(files, dir, /^requirements.*\.txt$/)
+
+  if (requirementsFile) {
+    return [
+      'python -m venv .venv',
+      'source .venv/bin/activate',
+      `pip install -r ${requirementsFile.path.split('/').pop()}`,
+    ]
+  }
+
+  if (hasFileInDirectory(files, dir, 'Pipfile')) {
+    return ['pipenv install']
+  }
+
+  if (hasFileInDirectory(files, dir, 'pyproject.toml') || hasFileInDirectory(files, dir, 'setup.py')) {
+    return [
+      'python -m venv .venv',
+      'source .venv/bin/activate',
+      'pip install -e .',
+    ]
+  }
+
+  return []
+}
+
+function createPythonCommandGroups(files, selectedFileContents) {
+  // Python 의존성 파일 위치를 기준으로 설치 명령과 실행 진입점을 같은 그룹으로 묶음
+  return getPythonDependencyContexts(files)
+    .map((context) => {
+      const appInfo = findPythonAppInfo(selectedFileContents, context.dir)
+
+      return {
+        type: 'python',
+        label: getCommandGroupLabel(context, 'python', appInfo),
+        dir: context.dir,
+        framework: appInfo?.framework || null,
+        install: getPythonInstallCommands(files, context.dir),
+        run: appInfo?.command ? [appInfo.command] : [],
+        build: hasFileInDirectory(files, context.dir, 'pyproject.toml') ? ['python -m build'] : [],
+        test: ['pytest'],
+      }
+    })
+    .filter((group) => group.install.length > 0 || group.run.length > 0)
+}
+
+function commandGroupPriority(group) {
+  if (group.label === 'Frontend') return 10
+  if (group.label === 'Backend API') return 20
+  if (group.label === 'AI Server') return 30
+  if (group.label === 'Backend Python') return 40
+  return 100
+}
+
+function detectCommandGroups(files, packageContexts, selectedFileContents) {
+  return [
+    ...createNodeCommandGroups(packageContexts, files),
+    ...createPythonCommandGroups(files, selectedFileContents),
+  ].sort((left, right) => {
+    const priorityDiff = commandGroupPriority(left) - commandGroupPriority(right)
+    return priorityDiff || left.dir.localeCompare(right.dir)
+  })
+}
+
+function firstCommand(commands = []) {
+  return commands.find(Boolean) || null
+}
+
+function detectCommands(files, packageJson, techStack, commandGroups = []) {
+  if (commandGroups.length > 0) {
+    const runnableGroup = commandGroups.find((group) => group.run.length > 0) || commandGroups[0]
+
+    return {
+      install: firstCommand(runnableGroup.install),
+      run: firstCommand(runnableGroup.run),
+      build: firstCommand(runnableGroup.build),
+      test: firstCommand(runnableGroup.test),
+    }
+  }
+
   // 실제 package.json scripts가 있으면 추정 명령어보다 저장소 정의를 우선 사용
   if (packageJson) {
     const scripts = packageJson.scripts || {}
@@ -752,11 +1044,13 @@ function buildRepositoryAnalysis(repoInfo, selectedFileContents) {
 export function organizeReadmeData(repoInfo, files, selectedFiles, selectedFileContents) {
   // 핵심 파일 내용에서 package.json과 기존 README 여부를 먼저 분석
   const packageJson = parsePackageJson(selectedFileContents)
+  const packageContexts = parsePackageContexts(selectedFileContents)
   const existingReadme = selectedFileContents.find(isReadmeFile)
   const repositoryAnalysis = buildRepositoryAnalysis(repoInfo, selectedFileContents)
   const buildTools = detectBuildTools(files)
   const techStack = detectTechStack(repoInfo, files, selectedFileContents, packageJson)
-  const commands = detectCommands(files, packageJson, techStack)
+  const commandGroups = detectCommandGroups(files, packageContexts, selectedFileContents)
+  const commands = detectCommands(files, packageJson, techStack, commandGroups)
   const projectType = detectProjectType(files, techStack)
   const detectedFeatures = detectFeatures(files, techStack)
   const primaryLanguage = getPrimaryLanguage(repoInfo, files)
@@ -766,6 +1060,7 @@ export function organizeReadmeData(repoInfo, files, selectedFiles, selectedFileC
     repository: {
       name: repoInfo.name,
       fullName: repoInfo.fullName,
+      summary: repoInfo.summary || null,
       description: repoInfo.description,
       language: primaryLanguage,
       url: repoInfo.url,
@@ -785,6 +1080,9 @@ export function organizeReadmeData(repoInfo, files, selectedFiles, selectedFileC
       topLevelDirectories: getTopLevelDirectories(files),
       structureHighlights: getStructureHighlights(files),
       structurePaths: getStructurePaths(files),
+      envExamplePaths: getEnvExamplePaths(files),
+      dockerFiles: getDockerFiles(files),
+      dockerComposeFiles: getDockerComposeFiles(files),
     },
     // README 생성에 필요하다고 선별된 핵심 파일 목록
     importantFiles: selectedFiles.map((file) => ({
@@ -805,6 +1103,7 @@ export function organizeReadmeData(repoInfo, files, selectedFiles, selectedFileC
     })),
     // README 템플릿에서 바로 참고할 수 있는 분석 결과
     analysis: {
+      summary: repoInfo.summary || null,
       hasExistingReadme: Boolean(existingReadme),
       packageName: packageJson?.name || null,
       packageVersion: packageJson?.version || null,
@@ -815,11 +1114,13 @@ export function organizeReadmeData(repoInfo, files, selectedFiles, selectedFileC
       dependencies: packageJson?.dependencies || [],
       devDependencies: packageJson?.devDependencies || [],
       dependencyVersions: packageJson?.dependencyVersions || {},
+      packageContexts,
       projectType,
       primaryLanguage,
       buildTools,
       techStack,
       commands,
+      commandGroups,
       detectedFeatures,
       repositoryProfile: repositoryAnalysis.selection.profile,
       monorepo: repositoryAnalysis.selection.monorepo,

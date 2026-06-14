@@ -13,8 +13,9 @@ const DEFAULT_OPTIONS = {
     features: true,
     techStack: true,
     projectStructure: true,
-    importantFiles: true,
-    scripts: true,
+    // 최종 배포 기본값은 안정적인 요약 섹션 위주로 구성함
+    importantFiles: false,
+    scripts: false,
     license: true,
     link: true,
   },
@@ -69,72 +70,6 @@ const sectionBlock = (sections, key, title, content) => {
 }
 
 const joinBlocks = (blocks) => blocks.filter(Boolean).join('\n\n')
-
-const findPackageJson = (selectedFileContents = []) =>
-  selectedFileContents.find((file) => file.path?.split('/').pop() === 'package.json')
-
-// 백엔드 분석 결과에 scripts가 없을 때 selectedFileContents의 package.json을 보조 출처로 사용
-const extractPackageScripts = (repoInfo) => {
-  const scripts = repoInfo.readmeData?.analysis?.scripts || {}
-
-  if (Object.keys(scripts).length > 0) {
-    return scripts
-  }
-
-  const packageJson = findPackageJson(repoInfo.selectedFileContents)
-
-  if (!packageJson) {
-    return null
-  }
-
-  try {
-    const parsed = JSON.parse(packageJson.content)
-    return parsed.scripts || {}
-  } catch {
-    return {}
-  }
-}
-
-// selectedFileContents에서 package.json을 찾아 scripts 추출
-function extractScripts(repoInfo) {
-  const commands = repoInfo.readmeData?.analysis?.commands
-
-  if (commands) {
-    return {
-      install: commands.install || TEXT.noInstallCommand,
-      dev: commands.run || TEXT.noRunCommand,
-      build: commands.build || TEXT.noBuildCommand,
-      test: commands.test || TEXT.noTestCommand,
-    }
-  }
-
-  const scripts = extractPackageScripts(repoInfo)
-
-  if (!scripts) {
-    return {
-      install: TEXT.noInstallCommand,
-      dev: TEXT.noRunCommand,
-      build: TEXT.noBuildCommand,
-      test: TEXT.noTestCommand,
-    }
-  }
-
-  // 실행 명령어 우선순위: dev > start > serve
-  const devScript = scripts.dev
-    ? 'npm run dev'
-    : scripts.start
-      ? 'npm start'
-    : scripts.serve
-      ? 'npm run serve'
-      : TEXT.noRunCommand
-
-  return {
-    install: 'npm install',
-    dev: devScript,
-    build: scripts.build ? 'npm run build' : TEXT.noBuildCommand,
-    test: scripts.test ? 'npm test' : TEXT.noTestCommand,
-  }
-}
 
 const formatFeatures = (repoInfo) => {
   const features = repoInfo.features || repoInfo.readmeData?.analysis?.detectedFeatures
@@ -492,6 +427,10 @@ const formatLicense = (license) => {
 }
 
 const isMissingCommand = (command) => {
+  if (Array.isArray(command)) {
+    return command.length === 0 || command.every(isMissingCommand)
+  }
+
   if (!command) return true
 
   // 실제 명령어와 "감지된 명령어 없음" 안내 문구를 구분해 빈 코드 블록 생성을 피함
@@ -561,6 +500,24 @@ const getDomainDescription = (path) => {
   // 파일 경로에 포함된 도메인 단서를 README 설명 문구의 주어로 변환
   const matchedDomain = IMPORTANT_FILE_DOMAINS.find(([pattern]) => pattern.test(path))
   return matchedDomain?.[1] || ''
+}
+
+const normalizeImportantFileDescription = (description) => {
+  const normalizedDescription = String(description || '').trim()
+
+  if (!normalizedDescription) {
+    return '프로젝트 동작 이해에 필요한 핵심 역할을 담당합니다.'
+  }
+
+  if (/입니다\.?$/.test(normalizedDescription)) {
+    return normalizedDescription.replace(/입니다\.?$/, ' 역할을 담당합니다.')
+  }
+
+  if (/[.!?。]$/.test(normalizedDescription)) {
+    return normalizedDescription
+  }
+
+  return `${normalizedDescription} 역할을 담당합니다.`
 }
 
 const describeImportantFile = (file) => {
@@ -648,7 +605,7 @@ const describeImportantFile = (file) => {
 
   if (/\/services?\//.test(normalizedPath) || /service\.(js|ts|py|java|kt|go|rb|php|cs)$/i.test(filename)) {
     if (domainDescription) {
-      return `${domainDescription}을 담당하는 서비스 로직입니다.`
+      return `${domainDescription}을 처리하는 서비스 로직을 담당합니다.`
     }
 
     return `${subjectPrefix}비즈니스 로직과 데이터 처리를 담당합니다.`
@@ -675,7 +632,7 @@ const describeImportantFile = (file) => {
   }
 
   if (/\/components?\//.test(normalizedPath) || /component\.(jsx|tsx|js|ts)$/i.test(filename)) {
-    return `${subjectPrefix}화면을 구성하는 UI 컴포넌트입니다.`
+    return `${subjectPrefix}화면을 구성하는 UI 컴포넌트 역할을 담당합니다.`
   }
 
   if (/\/pages?\//.test(normalizedPath) || /\/views?\//.test(normalizedPath)) {
@@ -757,10 +714,10 @@ const describeImportantFile = (file) => {
   }
 
   if (/\/tests?\//.test(normalizedPath) || /\.(test|spec)\./i.test(filename)) {
-    return '주요 기능의 동작을 검증하는 테스트 코드입니다.'
+    return '주요 기능의 동작을 검증하는 테스트 코드를 담당합니다.'
   }
 
-  return file.reason || '프로젝트 동작 이해에 필요한 핵심 파일입니다.'
+  return normalizeImportantFileDescription(file.reason)
 }
 
 // README 생성에 활용할 핵심 파일 목록을 markdown 표 형태로 변환
@@ -776,70 +733,320 @@ const formatImportantFiles = (readmeData) => {
     .slice(0, 10)
     .map((file) => [
       pathCell(file.path),
-      describeImportantFile(file),
+      normalizeImportantFileDescription(describeImportantFile(file)),
     ])
 
   return formatMarkdownTable(headers, rows)
 }
 
-const formatCommandBlock = (commandEntries) => {
-  if (commandEntries.length === 0) {
+const formatBashBlock = (commands) => {
+  const commandLines = commands.filter(Boolean)
+
+  if (commandLines.length === 0) {
     return ''
   }
 
-  return `\`\`\`bash\n${commandEntries
-    .map(([name, command]) => `# ${name}\n${command}`)
-    .join('\n\n')}\n\`\`\``
+  return `\`\`\`bash\n${commandLines.join('\n')}\n\`\`\``
 }
 
-// package.json에서 추출한 실행 스크립트를 복사 가능한 bash 코드 블록으로 변환
+const normalizeCommandList = (commands) => {
+  if (Array.isArray(commands)) {
+    return commands.filter((command) => !isMissingCommand(command))
+  }
+
+  return isMissingCommand(commands) ? [] : [commands]
+}
+
+const normalizeCommandGroup = (group) => {
+  const context = {
+    ...group,
+    dir: group.dir || '.',
+  }
+
+  return {
+    ...context,
+    label: context.label || getContextLabel(context),
+    install: normalizeCommandList(context.install),
+    run: normalizeCommandList(context.run),
+    build: normalizeCommandList(context.build),
+    test: normalizeCommandList(context.test),
+  }
+}
+
+const getReadmePaths = (readmeData) => {
+  const pathItems = [
+    ...(readmeData?.sourceFiles || []),
+    ...(readmeData?.importantFiles || []),
+    ...(readmeData?.fileSummary?.structurePaths || []),
+    ...(readmeData?.fileSummary?.structureHighlights || []),
+  ]
+
+  return pathItems.map((item) => item.path).filter(Boolean)
+}
+
+const getPackageDirectory = (path = '') => {
+  const segments = path.split('/').filter(Boolean)
+
+  if (segments.length <= 1) {
+    return '.'
+  }
+
+  return segments.slice(0, -1).join('/')
+}
+
+const parsePackageContexts = (readmeData) =>
+  (readmeData?.sourceFiles || [])
+    .filter((file) => file.path?.split('/').pop() === 'package.json')
+    .map((file) => {
+      try {
+        const packageJson = JSON.parse(file.content)
+        return {
+          dir: getPackageDirectory(file.path),
+          name: packageJson.name || null,
+          scripts: packageJson.scripts || {},
+        }
+      } catch {
+        return null
+      }
+    })
+    .filter(Boolean)
+
+const getContextLabel = (context) => {
+  const topLevelDir = context.dir.split('/')[0]
+
+  if (context.dir === '.') {
+    return '루트'
+  }
+
+  if (topLevelDir === 'frontend') {
+    return 'Frontend'
+  }
+
+  if (topLevelDir === 'backend') {
+    return 'Backend'
+  }
+
+  return context.name || context.dir
+}
+
+const hasTopLevelPath = (paths, dirname) =>
+  paths.some((path) => path === dirname || path.startsWith(`${dirname}/`))
+
+const isSplitFrontendBackend = (readmeData, packageContexts) => {
+  const paths = getReadmePaths(readmeData)
+  const hasFrontend = hasTopLevelPath(paths, 'frontend')
+  const hasBackend = hasTopLevelPath(paths, 'backend')
+
+  return hasFrontend && hasBackend && packageContexts.some((context) =>
+    ['frontend', 'backend'].includes(context.dir.split('/')[0])
+  )
+}
+
+const getInstallContexts = (readmeData) => {
+  const commandGroups = readmeData?.analysis?.commandGroups || []
+
+  if (commandGroups.length > 0) {
+    return commandGroups.map(normalizeCommandGroup)
+  }
+
+  const packageContexts = parsePackageContexts(readmeData)
+
+  if (packageContexts.length === 0) {
+    const command = readmeData?.analysis?.commands?.install
+    return isMissingCommand(command)
+      ? []
+      : [{ dir: '.', label: '루트', install: command, scripts: {} }]
+  }
+
+  const splitProject = isSplitFrontendBackend(readmeData, packageContexts)
+  const contexts = splitProject
+    ? packageContexts.filter((context) =>
+      ['frontend', 'backend'].includes(context.dir.split('/')[0])
+    )
+    : [packageContexts.find((context) => context.dir === '.') || packageContexts[0]]
+
+  return contexts.map((context) => ({
+    ...context,
+    label: getContextLabel(context),
+    install: ['npm install'],
+  }))
+}
+
+const getRunCommand = (context) => {
+  if (context.run) {
+    return context.run
+  }
+
+  if (context.scripts?.dev) {
+    return 'npm run dev'
+  }
+
+  if (context.scripts?.start) {
+    return 'npm start'
+  }
+
+  if (context.scripts?.serve) {
+    return 'npm run serve'
+  }
+
+  return null
+}
+
+const getBuildCommand = (context) => {
+  if (context.build) {
+    return context.build
+  }
+
+  return context.scripts?.build ? 'npm run build' : null
+}
+
+const formatContextCommand = (context, command) => {
+  const commands = normalizeCommandList(command)
+
+  return context.dir === '.' ? commands : [`cd ${context.dir}`, ...commands]
+}
+
+const formatContextCommandStep = (contexts, commandGetter, emptyMessage) => {
+  const commandBlocks = contexts
+    .map((context) => {
+      const command = commandGetter(context)
+
+      if (isMissingCommand(command)) {
+        return ''
+      }
+
+      return `#### ${context.label}\n\n${formatBashBlock(formatContextCommand(context, command))}`
+    })
+    .filter(Boolean)
+
+  return commandBlocks.length > 0 ? commandBlocks.join('\n\n') : `- ${emptyMessage}`
+}
+
+const getEnvExamplePaths = (readmeData) =>
+  readmeData?.fileSummary?.envExamplePaths?.length > 0
+    ? readmeData.fileSummary.envExamplePaths
+    : getReadmePaths(readmeData).filter((path) =>
+      /(^|\/)\.env(\.[\w-]+)?\.(example|sample|template)$/.test(path)
+    )
+
+const getEnvTargetPath = (path) =>
+  path
+    .replace(/\.example$/, '')
+    .replace(/\.sample$/, '')
+    .replace(/\.template$/, '')
+
+const getEnvSourceFile = (readmeData, path) =>
+  (readmeData?.sourceFiles || []).find((file) => file.path === path)
+
+const formatEnvExampleBlock = (sourceFile) => {
+  const content = String(sourceFile?.content || '').trim()
+
+  if (!content) {
+    return '- `.env.example` 파일을 참고해 필요한 값을 채워주세요.'
+  }
+
+  return `\`\`\`env\n${content}\n\`\`\``
+}
+
+const formatEnvSetupStep = (readmeData) => {
+  const envExamplePaths = getEnvExamplePaths(readmeData)
+
+  if (envExamplePaths.length === 0) {
+    return ''
+  }
+
+  // 환경 변수는 자동 표보다 저장소가 제공한 예시 파일을 신뢰 가능한 안내로 사용함
+  const envSections = envExamplePaths.map((path) => {
+    const envPath = getEnvTargetPath(path)
+    const sourceFile = getEnvSourceFile(readmeData, path)
+    const heading = envExamplePaths.length > 1 ? `#### ${path}\n\n` : ''
+
+    return `${heading}${formatBashBlock([`cp ${path} ${envPath}`])}\n\n${formatEnvExampleBlock(sourceFile)}`
+  })
+
+  return envSections.join('\n\n')
+}
+
+const formatDockerCommands = (readmeData) => {
+  const paths = getReadmePaths(readmeData)
+  const dockerComposeFiles = readmeData?.fileSummary?.dockerComposeFiles || []
+  const dockerFiles = readmeData?.fileSummary?.dockerFiles || []
+  const hasDockerCompose =
+    dockerComposeFiles.length > 0 ||
+    paths.some((path) => /(^|\/)docker-compose\.ya?ml$/.test(path))
+  const hasDockerfile =
+    dockerFiles.length > 0 ||
+    paths.some((path) => /(^|\/)Dockerfile$/.test(path))
+  const imageName = readmeData?.repository?.name || 'app'
+
+  if (hasDockerCompose) {
+    return `#### Docker Compose\n\n${formatBashBlock(['docker compose up -d'])}`
+  }
+
+  if (hasDockerfile) {
+    return `#### Docker\n\n${formatBashBlock([
+      `docker build -t ${imageName} .`,
+      `docker run --rm -p 3000:3000 ${imageName}`,
+    ])}`
+  }
+
+  return ''
+}
+
+const formatCloneStep = (readmeData) => {
+  const repository = readmeData?.repository || {}
+  const repoUrl = repository.url || 'https://github.com/owner/repository.git'
+  const repoName = repository.name || 'repository'
+
+  return formatBashBlock([
+    `git clone ${repoUrl}`,
+    `cd ${repoName}`,
+  ])
+}
+
+// 설치 및 실행 방법을 README의 표준 단계 구조로 변환
 const formatScripts = (readmeData) => {
-  const commands = readmeData?.analysis?.commands
+  const contexts = getInstallContexts(readmeData)
 
-  if (commands) {
-    const commandEntries = [
-      ['install', commands.install],
-      ['run', commands.run],
-      ['build', commands.build],
-      ['test', commands.test],
-    ].filter(([, command]) => !isMissingCommand(command))
+  if (contexts.length === 0) {
+    return `- ${TEXT.none}`
+  }
 
-    if (commandEntries.length > 0) {
-      return formatCommandBlock(commandEntries)
+  const commands = readmeData?.analysis?.commands || {}
+
+  if (contexts.length === 1 && contexts[0].dir === '.') {
+    contexts[0] = {
+      ...contexts[0],
+      run: commands.run,
+      build: commands.build,
+      test: commands.test,
     }
   }
 
-  // 분석된 scripts 정보가 없으면 None으로 표시
-  const scripts = readmeData?.analysis?.scripts || {}
-  const scriptEntries = Object.entries(scripts)
-  if (scriptEntries.length === 0) {
-    return `- ${TEXT.none}`
-  }
-  const commandEntries = scriptEntries
-    .slice(0, 6)
-    .map(([name]) => [name, `npm run ${name}`])
+  const dockerStep = formatDockerCommands(readmeData)
+  const devServerContent = [
+    formatContextCommandStep(contexts, getRunCommand, TEXT.noRunCommand),
+    dockerStep,
+  ].filter(Boolean).join('\n\n')
 
-  return formatCommandBlock(commandEntries)
-}
+  const steps = [
+    { title: '저장소 복제', content: formatCloneStep(readmeData) },
+    {
+      title: '의존성 설치',
+      content: formatContextCommandStep(
+        contexts,
+        (context) => context.install,
+        TEXT.noInstallCommand
+      ),
+    },
+    { title: '환경 변수 설정', content: formatEnvSetupStep(readmeData) },
+    { title: '개발 서버 실행', content: devServerContent || `- ${TEXT.noRunCommand}` },
+    { title: '빌드', content: formatContextCommandStep(contexts, getBuildCommand, TEXT.noBuildCommand) },
+  ].filter((step) => step.content)
 
-const inferStructureDescription = (path) => {
-  const normalizedPath = path.replace(/\/$/, '').toLowerCase()
-  const name = normalizedPath.split('/').pop()
-  const descriptions = {
-    src: '소스 코드',
-    app: '애플리케이션 라우팅 및 화면 구성',
-    public: '정적 파일',
-    components: 'UI 컴포넌트',
-    pages: '페이지 화면',
-    api: 'API 연동 및 요청 처리 코드',
-    backend: '백엔드 소스',
-    frontend: '프론트엔드 소스',
-    test: '테스트 코드',
-    tests: '테스트 코드',
-    docs: '문서',
-  }
-
-  return descriptions[normalizedPath] || descriptions[name] || ''
+  return steps
+    .map((step, index) => `### ${index + 1}. ${step.title}\n\n${step.content}`)
+    .join('\n\n')
 }
 
 const createTreeNode = (name = '', type = 'tree') => ({
@@ -909,10 +1116,8 @@ const renderStructureTree = (node, options = {}) => {
     const branch = isLast ? '└── ' : '├── '
     const childPath = pathPrefix ? `${pathPrefix}/${name}` : name
     const displayName = child.type === 'tree' ? `${name}/` : name
-    const description = inferStructureDescription(childPath)
-    const suffix = depth === 0 && description ? ` # ${description}` : ''
 
-    rows.push(`${prefix}${branch}${displayName}${suffix}`)
+    rows.push(`${prefix}${branch}${displayName}`)
 
     const childPrefix = `${prefix}${isLast ? '    ' : '│   '}`
     rows.push(
@@ -951,39 +1156,95 @@ const formatProjectStructure = (readmeData) => {
   return `\`\`\`text\n.\n${lines.join('\n')}\n\`\`\``
 }
 
-const formatOverview = (repoInfo) => {
-  // 상단 인용문과 중복되지 않도록 개요에는 저장소 설명만 간결하게 표시
-  const lines = [
-    repoInfo.description && repoInfo.description !== 'None'
-      ? repoInfo.description
-      : null,
-  ].filter(Boolean)
+const normalizeTextValue = (value) => {
+  const normalizedValue = String(value || '').trim()
 
-  if (lines.length === 0) {
-    return TEXT.none
+  return normalizedValue && normalizedValue !== 'None' ? normalizedValue : ''
+}
+
+const PROJECT_TYPE_LABELS = {
+  '.NET project': '.NET 프로젝트',
+  'ASP.NET Core web application': 'ASP.NET Core 웹 애플리케이션',
+  'C/C++ project': 'C/C++ 프로젝트',
+  'Dart project': 'Dart 프로젝트',
+  'Flutter application': 'Flutter 애플리케이션',
+  'Frontend application': '프론트엔드 애플리케이션',
+  'Go project': 'Go 프로젝트',
+  'Node.js project': 'Node.js 프로젝트',
+  'PHP project': 'PHP 프로젝트',
+  'Python project': 'Python 프로젝트',
+  'Ruby on Rails web application': 'Ruby on Rails 웹 애플리케이션',
+  'Ruby project': 'Ruby 프로젝트',
+  'Rust project': 'Rust 프로젝트',
+  'Scala project': 'Scala 프로젝트',
+  'Spring Boot web application': 'Spring Boot 웹 애플리케이션',
+  'Swift project': 'Swift 프로젝트',
+}
+
+const formatRuleBasedOverview = (repoInfo) => {
+  const readmeData = repoInfo.readmeData || {}
+  const analysis = readmeData.analysis || {}
+  const repository = readmeData.repository || {}
+  const projectType = PROJECT_TYPE_LABELS[analysis.projectType] || ''
+  const primaryLanguage = normalizeTextValue(
+    analysis.primaryLanguage || repository.language || repoInfo.language
+  )
+  const techStack = (analysis.techStack || [])
+    .filter((tech) => tech && tech !== primaryLanguage && tech !== 'Node.js')
+    .slice(0, 4)
+
+  // GitHub description이 없을 때만 분석된 언어/프로젝트 유형으로 개요를 보완
+  const lines = []
+  const subject = projectType || (primaryLanguage ? `${primaryLanguage} 프로젝트` : '소프트웨어 프로젝트')
+
+  if (primaryLanguage && projectType) {
+    lines.push(`이 프로젝트는 ${primaryLanguage} 기반의 ${projectType}입니다.`)
+  } else {
+    lines.push(`이 프로젝트는 ${subject}입니다.`)
+  }
+
+  if (techStack.length > 0) {
+    lines.push(`주요 기술로는 ${techStack.join(', ')} 등을 사용합니다.`)
   }
 
   return lines.join('\n\n')
 }
 
-const buildProjectCommandBlock = (scripts) =>
-  [
-    ['install', scripts.install],
-    ['run', scripts.dev],
-    ['build', scripts.build],
-    ['test', scripts.test],
-  ]
-    .filter(([, command]) => !isMissingCommand(command))
-    .map(([name, command]) => `# ${name}\n${command}`)
-    .join('\n\n')
+const formatOverview = (repoInfo) => {
+  // 개요는 AI 요약을 재사용하지 않고 원본 설명 또는 rule-based 분석 문장으로 구성
+  const description = normalizeTextValue(repoInfo.description)
+  const summary = normalizeTextValue(repoInfo.summary)
+
+  if (description && description !== summary) {
+    return description
+  }
+
+  return formatRuleBasedOverview(repoInfo)
+}
+
+const getReadmeSummary = (repoInfo) => {
+  // AI 한 줄 요약을 README 인용문에 우선 사용하고, 없으면 저장소 설명으로 대체
+  const summary =
+    repoInfo.summary ||
+    repoInfo.readmeData?.repository?.summary ||
+    repoInfo.readmeData?.analysis?.summary
+
+  const normalizedSummary = normalizeTextValue(summary)
+
+  if (normalizedSummary) {
+    return normalizedSummary
+  }
+
+  return normalizeTextValue(repoInfo.description)
+}
 
 const buildStandardSections = (repoInfo, sections) => {
-  const scripts = extractScripts(repoInfo)
+  const readmeSummary = getReadmeSummary(repoInfo)
 
   // 각 formatter가 섹션 본문만 만들고, 여기서 최종 README 섹션 순서를 결정
   return [
     `# ${repoInfo.name}`,
-    repoInfo.description && repoInfo.description !== 'None' ? `> ${repoInfo.description}` : '',
+    readmeSummary ? `> ${readmeSummary}` : '',
     sectionBlock(sections, 'overview', TEXT.overview, formatOverview(repoInfo)),
     sectionBlock(sections, 'features', TEXT.features, formatFeatures(repoInfo)),
     sectionBlock(sections, 'techStack', TEXT.techStack, formatTechStack(repoInfo)),
@@ -1003,7 +1264,7 @@ const buildStandardSections = (repoInfo, sections) => {
       sections,
       'scripts',
       TEXT.availableScripts,
-      formatScripts(repoInfo.readmeData) || `\`\`\`bash\n${buildProjectCommandBlock(scripts)}\n\`\`\``
+      formatScripts(repoInfo.readmeData)
     ),
     sectionBlock(sections, 'license', TEXT.license, formatLicense(repoInfo.license)),
     sectionBlock(sections, 'link', TEXT.link, `[GitHub Repository](${repoInfo.url})`),

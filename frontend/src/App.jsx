@@ -6,8 +6,13 @@ import ActionButtons from './components/ActionButtons.jsx'
 import ReadmeOptions from './components/ReadmeOptions.jsx'
 import AnalysisReport from './components/AnalysisReport.jsx'
 import GenerationProgress from './components/GenerationProgress.jsx'
+import {
+  MaximizeIcon,
+  MinimizeIcon,
+} from './components/Icons.jsx'
 import { requestReadmeStream } from './api/repoApi.js'
 import { parseGithubUrl } from './utils/parseGithubUrl.js'
+import logoImage from './assets/logo.png'
 import './App.css'
 
 const DEFAULT_SECTIONS = {
@@ -15,8 +20,9 @@ const DEFAULT_SECTIONS = {
   features: true,
   techStack: true,
   projectStructure: true,
-  importantFiles: true,
-  scripts: true,
+  // 추론 품질이 저장소마다 흔들릴 수 있는 상세 섹션은 사용자가 직접 켜도록 둠
+  importantFiles: false,
+  scripts: false,
   license: true,
   link: true,
 }
@@ -38,6 +44,7 @@ function App() {
   const [generationEvents, setGenerationEvents] = useState([])
   const [loading, setLoading] = useState(false)
   const [typing, setTyping] = useState(false)
+  const [editorFocusMode, setEditorFocusMode] = useState(false)
   const [scrollSyncEnabled, setScrollSyncEnabled] = useState(true)
   const selectedSectionCount = Object.values(sections).filter(Boolean).length
   const totalSectionCount = Object.keys(DEFAULT_SECTIONS).length
@@ -160,6 +167,7 @@ function App() {
     setMarkdown('')
     setAnalysisReport(null)
     setGenerationEvents([])
+    setEditorFocusMode(false)
 
     try {
       const { owner, repo } = parseGithubUrl(url)
@@ -207,12 +215,10 @@ function App() {
   }
 
   return (
-    <main className="app">
+    <main className={`app${editorFocusMode ? ' app-editor-focus' : ''}`}>
       <header className="app-header">
         <div className="brand-lockup">
-          <span className="brand-mark" aria-hidden="true">
-            W
-          </span>
+          <img className="brand-mark" src={logoImage} alt="" aria-hidden="true" />
           <div>
             <p className="eyebrow">README BUILDER</p>
             <h1>WRITEME.md</h1>
@@ -275,6 +281,15 @@ function App() {
                 <span aria-hidden="true" />
                 <strong>스크롤 동기화</strong>
               </label>
+              <button
+                className="focus-mode-button"
+                type="button"
+                aria-pressed={editorFocusMode}
+                onClick={() => setEditorFocusMode((currentMode) => !currentMode)}
+              >
+                {editorFocusMode ? <MinimizeIcon /> : <MaximizeIcon />}
+                {editorFocusMode ? '기본 보기' : '집중 모드'}
+              </button>
               <ActionButtons markdown={markdown} disabled={generationActive} />
             </div>
           </div>
