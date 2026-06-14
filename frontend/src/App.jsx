@@ -1,4 +1,4 @@
-import { useRef, useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import UrlInput from './components/UrlInput.jsx'
 import MarkdownEditor from './components/MarkdownEditor.jsx'
 import MarkdownPreview from './components/MarkdownPreview.jsx'
@@ -12,13 +12,13 @@ import './App.css'
 
 const DEFAULT_SECTIONS = {
   overview: true,
-  repositoryInfo: true,
-  techStack: true,
   features: true,
+  techStack: true,
   projectStructure: true,
   importantFiles: true,
   scripts: true,
   license: true,
+  link: true,
 }
 
 function App() {
@@ -27,6 +27,10 @@ function App() {
   const abortControllerRef = useRef(null)
   // requestIdRef는 느리게 도착한 이전 요청 결과가 최신 화면을 덮어쓰지 못하게 막음
   const requestIdRef = useRef(0)
+  const scrollSyncRef = useRef(false)
+  // 에디터/미리보기 실제 스크롤 DOM을 받아 동기화 이벤트 연결에 사용
+  const [editorScrollElement, setEditorScrollElement] = useState(null)
+  const [previewScrollElement, setPreviewScrollElement] = useState(null)
   const [url, setUrl] = useState('')
   const [sections, setSections] = useState(DEFAULT_SECTIONS)
   const [markdown, setMarkdown] = useState('')
@@ -34,10 +38,54 @@ function App() {
   const [generationEvents, setGenerationEvents] = useState([])
   const [loading, setLoading] = useState(false)
   const [typing, setTyping] = useState(false)
+  const [scrollSyncEnabled, setScrollSyncEnabled] = useState(true)
   const selectedSectionCount = Object.values(sections).filter(Boolean).length
   const totalSectionCount = Object.keys(DEFAULT_SECTIONS).length
   const markdownLineCount = markdown ? markdown.split('\n').length : 0
   const generationActive = loading || typing
+
+  useEffect(() => {
+    if (!scrollSyncEnabled || !editorScrollElement || !previewScrollElement) {
+      return undefined
+    }
+
+    // 양쪽 스크롤 이벤트가 서로를 다시 호출하지 않도록 동기화 중 상태 관리
+    const syncScrollPosition = (sourceElement, targetElement) => {
+      if (scrollSyncRef.current) {
+        return
+      }
+
+      const sourceScrollableHeight = sourceElement.scrollHeight - sourceElement.clientHeight
+      const targetScrollableHeight = targetElement.scrollHeight - targetElement.clientHeight
+
+      if (sourceScrollableHeight <= 0 || targetScrollableHeight <= 0) {
+        return
+      }
+
+      scrollSyncRef.current = true
+      targetElement.scrollTop =
+        (sourceElement.scrollTop / sourceScrollableHeight) * targetScrollableHeight
+
+      window.requestAnimationFrame(() => {
+        scrollSyncRef.current = false
+      })
+    }
+
+    const handleEditorScroll = () => {
+      syncScrollPosition(editorScrollElement, previewScrollElement)
+    }
+    const handlePreviewScroll = () => {
+      syncScrollPosition(previewScrollElement, editorScrollElement)
+    }
+
+    editorScrollElement.addEventListener('scroll', handleEditorScroll, { passive: true })
+    previewScrollElement.addEventListener('scroll', handlePreviewScroll, { passive: true })
+
+    return () => {
+      editorScrollElement.removeEventListener('scroll', handleEditorScroll)
+      previewScrollElement.removeEventListener('scroll', handlePreviewScroll)
+    }
+  }, [editorScrollElement, previewScrollElement, scrollSyncEnabled])
 
   // 사용자가 README에 포함할 섹션을 켜고 끌 때 기존 선택 상태를 보존하면서 한 항목만 변경
   const handleSectionToggle = (sectionKey) => {
@@ -217,7 +265,18 @@ function App() {
               <p className="eyebrow">LIVE README</p>
               <h2>편집 및 미리보기</h2>
             </div>
-            <ActionButtons markdown={markdown} disabled={generationActive} />
+            <div className="workspace-actions">
+              <label className="scroll-sync-toggle">
+                <input
+                  type="checkbox"
+                  checked={scrollSyncEnabled}
+                  onChange={(event) => setScrollSyncEnabled(event.target.checked)}
+                />
+                <span aria-hidden="true" />
+                <strong>스크롤 동기화</strong>
+              </label>
+              <ActionButtons markdown={markdown} disabled={generationActive} />
+            </div>
           </div>
 
           <GenerationProgress events={generationEvents} active={generationActive} />
@@ -228,8 +287,13 @@ function App() {
               markdown={markdown}
               lineCount={markdownLineCount}
               onChange={setMarkdown}
+              onScrollElementReady={setEditorScrollElement}
             />
-            <MarkdownPreview markdown={markdown} lineCount={markdownLineCount} />
+            <MarkdownPreview
+              markdown={markdown}
+              lineCount={markdownLineCount}
+              onScrollElementReady={setPreviewScrollElement}
+            />
           </section>
         </section>
       </section>

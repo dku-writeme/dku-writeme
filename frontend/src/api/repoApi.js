@@ -8,85 +8,35 @@ const buildApiUrl = (path) => `${API_BASE_URL}${path}`
 
 // README 생성 옵션의 기본값. 사용자가 일부 섹션만 넘겨도 나머지는 여기 값으로 채움
 const DEFAULT_OPTIONS = {
-  language: 'ko',
   sections: {
     overview: true,
-    repositoryInfo: true,
-    techStack: true,
     features: true,
+    techStack: true,
     projectStructure: true,
     importantFiles: true,
     scripts: true,
     license: true,
+    link: true,
   },
 }
 
-// README 제목과 안내 문구를 언어별로 관리해 템플릿 생성 로직에서 하드코딩을 줄임
+// README 제목과 안내 문구를 한 곳에서 관리해 템플릿 생성 로직에서 하드코딩을 줄임
 const TEXT = {
-  en: {
-    repositoryInfo: 'Repository Information',
-    fullName: 'Full Name',
-    description: 'Description',
-    language: 'Language',
-    defaultBranch: 'Default Branch',
-    stars: 'Stars',
-    forks: 'Forks',
-    openIssues: 'Open Issues',
-    topics: 'Topics',
-    lastUpdated: 'Last Updated',
-    createdAt: 'Created At',
-    features: 'Features',
-    projectStructure: 'Project Structure',
-    importantFiles: 'Important Files',
-    availableScripts: 'Available Scripts',
-    license: 'License',
-    link: 'Link',
-    overview: 'Overview',
-    techStack: 'Tech Stack',
-    projectInfo: 'Project Info',
-    repository: 'Repository',
-    url: 'URL',
-    primaryLanguage: 'Primary Language',
-    none: 'None',
-    noInstallCommand: 'No install command detected.',
-    noRunCommand: 'No run command detected.',
-    noBuildCommand: 'No build command detected.',
-    noTestCommand: 'No test command detected.',
-    noLicense: 'No license information provided.',
-    licenseText: (license) => `This project is licensed under the ${license} License.`,
-  },
-  ko: {
-    repositoryInfo: '저장소 정보',
-    fullName: '전체 이름',
-    description: '설명',
-    language: '언어',
-    defaultBranch: '기본 브랜치',
-    stars: '스타',
-    forks: '포크',
-    openIssues: '열린 이슈',
-    topics: '토픽',
-    lastUpdated: '마지막 업데이트',
-    createdAt: '생성일',
-    features: '주요 기능',
-    projectStructure: '프로젝트 구조',
-    importantFiles: '핵심 파일',
-    availableScripts: '실행 스크립트',
-    license: '라이선스',
-    link: '링크',
-    overview: '개요',
-    techStack: '기술 스택',
-    projectInfo: '프로젝트 정보',
-    repository: '저장소',
-    url: 'URL',
-    primaryLanguage: '주요 언어',
-    none: '없음',
-    noInstallCommand: '감지된 설치 명령어가 없습니다.',
-    noRunCommand: '감지된 실행 명령어가 없습니다.',
-    noBuildCommand: '감지된 빌드 명령어가 없습니다.',
-    noTestCommand: '감지된 테스트 명령어가 없습니다.',
-    noLicense: '제공된 라이선스 정보가 없습니다.',
-    licenseText: (license) => `이 프로젝트는 ${license} 라이선스를 따릅니다.`,
-  },
+  features: '✨ 주요 기능',
+  projectStructure: '📁 프로젝트 구조',
+  importantFiles: '🔑 핵심 파일',
+  availableScripts: '🚀 설치 및 실행 방법',
+  license: '📄 라이선스',
+  link: '🔗 링크',
+  overview: '📌 개요',
+  techStack: '🛠 기술 스택',
+  none: '없음',
+  noInstallCommand: '감지된 설치 명령어가 없습니다.',
+  noRunCommand: '감지된 실행 명령어가 없습니다.',
+  noBuildCommand: '감지된 빌드 명령어가 없습니다.',
+  noTestCommand: '감지된 테스트 명령어가 없습니다.',
+  noLicense: '제공된 라이선스 정보가 없습니다.',
+  licenseText: (license) => `이 프로젝트는 ${license} 라이선스를 따릅니다.`,
 }
 
 // 예전 호출 방식이나 부분 옵션 객체가 들어와도 내부에서는 항상 같은 형태로 다루기 위한 정규화
@@ -120,61 +70,6 @@ const sectionBlock = (sections, key, title, content) => {
 
 const joinBlocks = (blocks) => blocks.filter(Boolean).join('\n\n')
 
-// rule-based 분석 결과가 한국어로 저장되어 있을 때 영어 README 옵션에서만 대응 문구로 바꿈
-const TRANSLATIONS = {
-  en: {
-    'Spring Boot 기반 웹 애플리케이션 구조': 'Spring Boot based web application structure',
-    'Owner, Pet, Visit 도메인 관리': 'Owner, pet, and visit domain management',
-    'Veterinarian 정보 조회 및 관리': 'Veterinarian information lookup and management',
-    '서버 사이드 HTML 템플릿 화면 제공': 'Server-side HTML template views',
-    'H2, MySQL, PostgreSQL 데이터베이스 초기화 스크립트 제공': 'Database initialization scripts for H2, MySQL, and PostgreSQL',
-    'Docker Compose 기반 데이터베이스 실행 지원': 'Docker Compose support for local database services',
-    '애플리케이션 Java 소스 코드': 'Application Java source code',
-    '설정, 정적 리소스, 템플릿': 'Configuration, static resources, and templates',
-    '화면 템플릿': 'View templates',
-    '데이터베이스 스키마와 샘플 데이터': 'Database schema and sample data',
-    '테스트 코드': 'Test code',
-    'Kubernetes 배포 설정': 'Kubernetes deployment manifests',
-    'GitHub Actions 워크플로': 'GitHub Actions workflows',
-    '기존 README 파일': 'Existing README file',
-    'Node.js 의존성 및 실행 스크립트 파일': 'Node.js dependency and script manifest',
-    'Python 의존성 파일': 'Python dependency file',
-    'Python 프로젝트 설정 및 의존성 파일': 'Python project configuration and dependency file',
-    'Python 패키지 설정 파일': 'Python package configuration file',
-    'Gradle 빌드 설정 파일': 'Gradle build configuration file',
-    'Maven 빌드 설정 파일': 'Maven build configuration file',
-    'Go 모듈 의존성 파일': 'Go module dependency file',
-    'Rust 패키지 설정 파일': 'Rust package configuration file',
-    '애플리케이션 진입점 파일': 'Application entry point',
-    '요청 처리 흐름을 보여주는 컨트롤러/라우터 파일': 'Controller/router file that shows request handling flow',
-    '비즈니스 로직을 보여주는 서비스 파일': 'Service file that shows business logic',
-    '데이터 모델과 저장소 흐름을 보여주는 파일': 'File that shows data model or repository flow',
-    '프로젝트 설정 흐름을 보여주는 파일': 'File that shows project configuration flow',
-    'src 폴더의 주요 파일': 'Important source file under src',
-  },
-}
-
-const translate = (value, lang) => {
-  if (lang !== 'en') return value
-  return TRANSLATIONS.en[value] || value
-}
-
-// 토픽 목록이 비어있으면 README에 None으로 표시
-const formatTopics = (topics, lang = 'en') => {
-  if (!topics || topics.length === 0) {
-    return TEXT[lang].none
-  }
-  return topics.join(', ')
-}
-
-// GitHub API 날짜 문자열을 README에 보여줄 날짜 형식으로 변환
-const formatDate = (date, lang = 'en') => {
-  if (!date) {
-    return TEXT[lang].none
-  }
-  return new Date(date).toLocaleDateString()
-}
-
 const findPackageJson = (selectedFileContents = []) =>
   selectedFileContents.find((file) => file.path?.split('/').pop() === 'package.json')
 
@@ -201,15 +96,15 @@ const extractPackageScripts = (repoInfo) => {
 }
 
 // selectedFileContents에서 package.json을 찾아 scripts 추출
-function extractScripts(repoInfo, lang = 'en') {
+function extractScripts(repoInfo) {
   const commands = repoInfo.readmeData?.analysis?.commands
 
   if (commands) {
     return {
-      install: commands.install || TEXT[lang].noInstallCommand,
-      dev: commands.run || TEXT[lang].noRunCommand,
-      build: commands.build || TEXT[lang].noBuildCommand,
-      test: commands.test || TEXT[lang].noTestCommand,
+      install: commands.install || TEXT.noInstallCommand,
+      dev: commands.run || TEXT.noRunCommand,
+      build: commands.build || TEXT.noBuildCommand,
+      test: commands.test || TEXT.noTestCommand,
     }
   }
 
@@ -217,10 +112,10 @@ function extractScripts(repoInfo, lang = 'en') {
 
   if (!scripts) {
     return {
-      install: TEXT[lang].noInstallCommand,
-      dev: TEXT[lang].noRunCommand,
-      build: TEXT[lang].noBuildCommand,
-      test: TEXT[lang].noTestCommand,
+      install: TEXT.noInstallCommand,
+      dev: TEXT.noRunCommand,
+      build: TEXT.noBuildCommand,
+      test: TEXT.noTestCommand,
     }
   }
 
@@ -229,20 +124,22 @@ function extractScripts(repoInfo, lang = 'en') {
     ? 'npm run dev'
     : scripts.start
       ? 'npm start'
-      : scripts.serve
-        ? 'npm run serve'
-        : TEXT[lang].noRunCommand
+    : scripts.serve
+      ? 'npm run serve'
+      : TEXT.noRunCommand
 
   return {
     install: 'npm install',
     dev: devScript,
-    build: scripts.build ? 'npm run build' : TEXT[lang].noBuildCommand,
-    test: scripts.test ? 'npm test' : TEXT[lang].noTestCommand,
+    build: scripts.build ? 'npm run build' : TEXT.noBuildCommand,
+    test: scripts.test ? 'npm test' : TEXT.noTestCommand,
   }
 }
 
-const formatFeatures = (repoInfo, lang = 'en') => {
+const formatFeatures = (repoInfo) => {
   const features = repoInfo.features || repoInfo.readmeData?.analysis?.detectedFeatures
+  const fallbackDescription = '저장소 구조와 핵심 파일 분석을 통해 확인된 기능입니다.'
+
   // AI 응답은 문자열/배열/여러 줄 bullet 등 형태가 흔들릴 수 있어 한 번 평탄화
   const normalizeFeatureItems = (featureItems) =>
     featureItems
@@ -253,75 +150,636 @@ const formatFeatures = (repoInfo, lang = 'en') => {
       )
       .filter(Boolean)
 
+  const parseFeatureItem = (feature) => {
+    const normalizedFeature = feature.replace(/^-+\s*/, '')
+      .replace(/^\*\*(.+?)\*\*/, '$1')
+      .trim()
+    const separatorIndex = normalizedFeature.search(/[:：]/)
+
+    if (separatorIndex === -1) {
+      return {
+        description: fallbackDescription,
+        title: normalizedFeature,
+      }
+    }
+
+    return {
+      title: normalizedFeature.slice(0, separatorIndex).trim(),
+      description: normalizedFeature.slice(separatorIndex + 1).trim() || fallbackDescription,
+    }
+  }
+
+  const formatFeatureItems = (featureItems) =>
+    featureItems
+      .map(parseFeatureItem)
+      .filter((feature) => feature.title)
+      .map((feature) => `**${feature.title}**\n\n- ${feature.description}`)
+      .join('\n\n') || `- ${TEXT.none}`
+
   if (Array.isArray(features) && features.length > 0) {
-    return normalizeFeatureItems(features)
-      .map((feature) => `- ${translate(feature.replace(/^-+\s*/, ''), lang)}`)
-      .join('\n')
+    return formatFeatureItems(normalizeFeatureItems(features))
   }
 
   if (typeof features === 'string' && features.trim()) {
-    return features
-      .trim()
-      .split(/\r?\n/)
-      .map((feature) => feature.trim())
-      .filter(Boolean)
-      .map((feature) => {
-        const normalizedFeature = feature.replace(/^-+\s*/, '')
-        return `- ${translate(normalizedFeature, lang)}`
-      })
-      .join('\n')
+    return formatFeatureItems(normalizeFeatureItems([features]))
   }
 
-  return `- ${TEXT[lang].none}`
+  return `- ${TEXT.none}`
 }
 
-const formatTechStack = (repoInfo, lang = 'en') => {
-  // 같은 기술이 여러 탐지 경로에서 중복될 수 있으므로 Set으로 한 번 정리
-  const techStack = Array.from(new Set(repoInfo.readmeData?.analysis?.techStack || []))
+const formatTechStack = (repoInfo) => {
+  const analysis = repoInfo.readmeData?.analysis || {}
+  const structurePaths = repoInfo.readmeData?.fileSummary?.structurePaths || []
+  // dependency만으로 잡히지 않는 외부 API, CLI/ML 프레임워크 단서 보조 탐색
+  const sourceText = (repoInfo.readmeData?.sourceFiles || [])
+    .map((file) => `${file.path}\n${file.content || ''}`)
+    .join('\n')
+  const techStack = new Set(analysis.techStack || [])
+  const tableHeaders = ['분류', '기술']
+  const categoryLabels = {
+    'Build Tool': '빌드 도구',
+    'CI/CD': 'CI/CD',
+    Container: '컨테이너',
+    'Container Orchestration': '컨테이너 오케스트레이션',
+    Database: '데이터베이스',
+    Entrypoint: '진입점',
+    'External API': '외부 API',
+    Framework: '프레임워크',
+    'IaC': 'IaC',
+    Language: '언어',
+    Library: '라이브러리',
+    'ML Library': 'ML 라이브러리',
+    'Module System': '모듈 시스템',
+    Module: '모듈',
+    Notebook: '노트북',
+    'Orchestration': '오케스트레이션',
+    'Package Manager': '패키지 매니저',
+    Runtime: '런타임',
+    Server: '서버',
+    Styling: '스타일링',
+    Testing: '테스트',
+    'Type Definition': '타입 정의',
+    Visualization: '시각화',
+  }
+  const sectionLabels = {
+    application: 'Application',
+    backend: 'Backend',
+    cli: 'CLI',
+    data: 'Data / ML',
+    frontend: 'Frontend',
+    infrastructure: 'Infrastructure',
+    library: 'Library',
+  }
+  const localizeRows = (rows) =>
+    rows.map(([category, value]) => [categoryLabels[category] || category, value])
+  const dependencies = new Set([...(analysis.dependencies || []), ...(analysis.devDependencies || [])])
+  const dependencyVersions = analysis.dependencyVersions || {}
+  const hasDependency = (name) => dependencies.has(name)
+  const hasPath = (pattern) => structurePaths.some((file) => pattern.test(file.path))
+  const hasSource = (pattern) => pattern.test(sourceText)
+  const cleanVersion = (version) =>
+    String(version || '')
+      .replace(/^[~^><=\s]+/, '')
+      .split(/[.\s-]/)[0]
 
-  if (techStack.length > 0) {
-    return techStack.map((item) => `- ${item}`).join('\n')
+  // README 기술 스택 표가 과하게 길어지지 않도록 패키지 버전은 major 버전만 표시
+  const withVersion = (name, packageName = name.toLowerCase()) => {
+    const version = cleanVersion(dependencyVersions[packageName])
+    return version ? `${name} ${version}` : name
+  }
+  const nodeVersion = cleanVersion(analysis.engines?.node)
+  const externalApis = [
+    ['OpenWeather', /openweather/i],
+    ['AirKorea', /airkorea|air korea/i],
+    ['Yahoo Finance', /yahoo finance|query\d?\.finance\.yahoo/i],
+    ['CNN Fear & Greed', /fear\s*&\s*greed|cnn/i],
+    ['GitHub API', /api\.github\.com|github api/i],
+    ['OpenAI API', /openai/i],
+  ]
+    .filter(([, pattern]) => hasSource(pattern))
+    .map(([name]) => name)
+
+  const frontendRows = []
+  const backendRows = []
+  const libraryRows = []
+  const cliRows = []
+  const dataRows = []
+  const infrastructureRows = []
+  const applicationRows = []
+  const addRow = (rows, category, value) => {
+    if (!value || rows.some((row) => row[0] === category && row[1] === value)) {
+      return
+    }
+
+    rows.push([category, value])
   }
 
-  return `- ${repoInfo.language || TEXT[lang].none}`
+  // 저장소 성격별 기술 스택 표 분리 기준
+  const usesFrontend =
+    hasDependency('react') ||
+    hasDependency('vue') ||
+    hasDependency('@angular/core') ||
+    hasDependency('svelte') ||
+    hasPath(/\.(jsx|tsx|css|scss)$/)
+  const usesBackend =
+    techStack.has('Spring Boot') ||
+    techStack.has('FastAPI') ||
+    techStack.has('Django') ||
+    techStack.has('Flask') ||
+    techStack.has('Ruby on Rails') ||
+    techStack.has('Laravel') ||
+    techStack.has('ASP.NET Core') ||
+    hasDependency('express') ||
+    hasDependency('fastify') ||
+    hasDependency('@nestjs/core') ||
+    hasPath(/(^|\/)(server|controllers|routes)\//) ||
+    hasPath(/(^|\/)(server|app|index)\.(js|ts)$/) ||
+    hasSource(/createServer|express|fastify|nestjs|springframework|fastapi/i)
+  const usesCli =
+    Boolean(analysis.packageEntrypoints?.bin) ||
+    hasDependency('commander') ||
+    hasDependency('yargs') ||
+    hasSource(/commander|yargs|argparse|click\.command|typer\.Typer|spf13\/cobra|clap::/i)
+  const hasDataScienceLibrary =
+    techStack.has('NumPy') ||
+    techStack.has('Pandas') ||
+    techStack.has('scikit-learn') ||
+    techStack.has('TensorFlow') ||
+    techStack.has('PyTorch') ||
+    techStack.has('Matplotlib')
+  const hasNotebook = hasPath(/\.(ipynb)$/) || hasPath(/(^|\/)notebooks?\//)
+  const hasDataScienceDirectory = hasPath(/(^|\/)(data|datasets?|models?)\//)
+  // 일반 백엔드 models 폴더가 Data / ML로 오탐되지 않도록 Python 근거와 함께 판정
+  const isPythonDataProject = (
+    analysis.primaryLanguage === 'Python' ||
+    repoInfo.language === 'Python' ||
+    techStack.has('Python')
+  ) && hasDataScienceDirectory
+  const usesData = hasDataScienceLibrary || hasNotebook || isPythonDataProject
+  const usesInfrastructure =
+    techStack.has('Docker') ||
+    hasPath(/(^|\/)Dockerfile$/) ||
+    hasPath(/docker-compose\.ya?ml$/) ||
+    hasPath(/(^|\/)\.github\/workflows\//) ||
+    hasPath(/\.(tf|tfvars)$/) ||
+    hasPath(/(^|\/)(k8s|kubernetes|helm|charts)\//)
+  const usesLibrary =
+    !usesFrontend &&
+    !usesBackend &&
+    !usesCli &&
+    !usesData &&
+    (
+      Boolean(analysis.packageEntrypoints?.main || analysis.packageEntrypoints?.module || analysis.packageEntrypoints?.types) ||
+      hasPath(/(^|\/)src\/lib\.(js|ts|rs)$/) ||
+      hasPath(/(^|\/)lib\//) ||
+      hasPath(/(^|\/)(setup\.py|pyproject\.toml|Cargo\.toml|composer\.json|Package\.swift)$/)
+    )
+
+  // 감지 근거가 있는 섹션만 행 추가, 빈 표 생성 방지
+  if (usesFrontend) {
+    addRow(
+      frontendRows,
+      'Language',
+      techStack.has('TypeScript') ? 'TypeScript' : repoInfo.language || analysis.primaryLanguage || 'JavaScript'
+    )
+
+    if (hasDependency('react')) addRow(frontendRows, 'Framework', withVersion('React', 'react'))
+    if (hasDependency('vue')) addRow(frontendRows, 'Framework', withVersion('Vue', 'vue'))
+    if (hasDependency('@angular/core')) addRow(frontendRows, 'Framework', withVersion('Angular', '@angular/core'))
+    if (hasDependency('svelte')) addRow(frontendRows, 'Framework', withVersion('Svelte', 'svelte'))
+    if (hasDependency('vite')) addRow(frontendRows, 'Build Tool', withVersion('Vite', 'vite'))
+    if (hasDependency('webpack')) addRow(frontendRows, 'Build Tool', withVersion('Webpack', 'webpack'))
+    if (hasDependency('tailwindcss')) addRow(frontendRows, 'Styling', withVersion('Tailwind CSS', 'tailwindcss'))
+    else if (hasDependency('sass')) addRow(frontendRows, 'Styling', withVersion('Sass', 'sass'))
+    else if (hasDependency('styled-components')) {
+      addRow(frontendRows, 'Styling', withVersion('styled-components', 'styled-components'))
+    } else if (hasPath(/\.(css|scss)$/)) {
+      addRow(frontendRows, 'Styling', hasPath(/\.scss$/) ? 'SCSS' : 'CSS')
+    }
+  }
+
+  if (usesBackend) {
+    if (!techStack.has('Node.js') && (analysis.primaryLanguage || repoInfo.language)) {
+      addRow(backendRows, 'Language', analysis.primaryLanguage || repoInfo.language)
+    }
+    if (techStack.has('Node.js')) addRow(backendRows, 'Runtime', nodeVersion ? `Node.js ${nodeVersion}+` : 'Node.js')
+    if (analysis.packageType === 'module') addRow(backendRows, 'Module System', 'ES Modules')
+    if (techStack.has('Spring Boot')) addRow(backendRows, 'Framework', 'Spring Boot')
+    if (techStack.has('FastAPI')) addRow(backendRows, 'Framework', 'FastAPI')
+    if (techStack.has('Django')) addRow(backendRows, 'Framework', 'Django')
+    if (techStack.has('Flask')) addRow(backendRows, 'Framework', 'Flask')
+    if (techStack.has('Ruby on Rails')) addRow(backendRows, 'Framework', 'Ruby on Rails')
+    if (techStack.has('Laravel')) addRow(backendRows, 'Framework', 'Laravel')
+    if (techStack.has('ASP.NET Core')) addRow(backendRows, 'Framework', 'ASP.NET Core')
+    if (hasDependency('express')) addRow(backendRows, 'Server', withVersion('Express', 'express'))
+    else if (hasDependency('fastify')) addRow(backendRows, 'Server', withVersion('Fastify', 'fastify'))
+    else if (hasDependency('@nestjs/core')) addRow(backendRows, 'Server', withVersion('NestJS', '@nestjs/core'))
+    else if (techStack.has('Node.js')) addRow(backendRows, 'Server', 'Node.js HTTP Server')
+    if (techStack.has('H2 Database')) addRow(backendRows, 'Database', 'H2 Database')
+    if (techStack.has('MySQL')) addRow(backendRows, 'Database', 'MySQL')
+    if (techStack.has('PostgreSQL')) addRow(backendRows, 'Database', 'PostgreSQL')
+    if (externalApis.length > 0) addRow(backendRows, 'External API', externalApis.join(', '))
+  }
+
+  if (usesLibrary) {
+    if (analysis.primaryLanguage || repoInfo.language) {
+      addRow(libraryRows, 'Language', analysis.primaryLanguage || repoInfo.language)
+    }
+    if (analysis.packageEntrypoints?.types) addRow(libraryRows, 'Type Definition', analysis.packageEntrypoints.types)
+    if (analysis.packageEntrypoints?.main) addRow(libraryRows, 'Entrypoint', analysis.packageEntrypoints.main)
+    if (analysis.packageEntrypoints?.module) addRow(libraryRows, 'Module', analysis.packageEntrypoints.module)
+    if (techStack.has('Cargo')) addRow(libraryRows, 'Package Manager', 'Cargo')
+    if (techStack.has('Swift Package Manager')) addRow(libraryRows, 'Package Manager', 'Swift Package Manager')
+  }
+
+  if (usesCli) {
+    if (analysis.primaryLanguage || repoInfo.language) {
+      addRow(cliRows, 'Language', analysis.primaryLanguage || repoInfo.language)
+    }
+    if (hasDependency('commander')) addRow(cliRows, 'Framework', withVersion('Commander', 'commander'))
+    if (hasDependency('yargs')) addRow(cliRows, 'Framework', withVersion('Yargs', 'yargs'))
+    if (hasSource(/click\.command/i)) addRow(cliRows, 'Framework', 'Click')
+    if (hasSource(/typer\.Typer/i)) addRow(cliRows, 'Framework', 'Typer')
+    if (hasSource(/spf13\/cobra/i)) addRow(cliRows, 'Framework', 'Cobra')
+    if (hasSource(/clap::/i)) addRow(cliRows, 'Framework', 'clap')
+    if (analysis.packageEntrypoints?.bin) addRow(cliRows, 'Entrypoint', 'package.json bin')
+  }
+
+  if (usesData) {
+    if (analysis.primaryLanguage || repoInfo.language) {
+      addRow(dataRows, 'Language', analysis.primaryLanguage || repoInfo.language)
+    }
+    if (techStack.has('NumPy')) addRow(dataRows, 'Library', 'NumPy')
+    if (techStack.has('Pandas')) addRow(dataRows, 'Library', 'Pandas')
+    if (techStack.has('scikit-learn')) addRow(dataRows, 'ML Library', 'scikit-learn')
+    if (techStack.has('TensorFlow')) addRow(dataRows, 'ML Library', 'TensorFlow')
+    if (techStack.has('PyTorch')) addRow(dataRows, 'ML Library', 'PyTorch')
+    if (techStack.has('Matplotlib')) addRow(dataRows, 'Visualization', 'Matplotlib')
+    if (hasPath(/\.ipynb$/)) addRow(dataRows, 'Notebook', 'Jupyter Notebook')
+  }
+
+  if (usesInfrastructure) {
+    if (techStack.has('Docker')) addRow(infrastructureRows, 'Container', 'Docker')
+    if (hasPath(/docker-compose\.ya?ml$/)) addRow(infrastructureRows, 'Container Orchestration', 'Docker Compose')
+    if (hasPath(/(^|\/)\.github\/workflows\//)) addRow(infrastructureRows, 'CI/CD', 'GitHub Actions')
+    if (hasPath(/\.(tf|tfvars)$/)) addRow(infrastructureRows, 'IaC', 'Terraform')
+    if (hasPath(/(^|\/)(k8s|kubernetes|helm|charts)\//)) {
+      addRow(infrastructureRows, 'Orchestration', 'Kubernetes / Helm')
+    }
+  }
+
+  // 다른 성격으로 분류되지 않은 언어 중심 프로젝트만 Application 섹션으로 표시
+  const usesStandaloneApplication =
+    !usesFrontend && !usesBackend && !usesLibrary && !usesCli && !usesData
+
+  if (usesStandaloneApplication) {
+    if (techStack.has('Flutter') || techStack.has('Dart')) {
+      addRow(applicationRows, 'Language', 'Dart')
+      if (techStack.has('Flutter')) addRow(applicationRows, 'Framework', 'Flutter')
+    }
+    if (techStack.has('Swift')) addRow(applicationRows, 'Language', 'Swift')
+    if (techStack.has('Swift Package Manager')) {
+      addRow(applicationRows, 'Build Tool', 'Swift Package Manager')
+    }
+    if (techStack.has('Kotlin')) addRow(applicationRows, 'Language', 'Kotlin')
+    if (techStack.has('C/C++')) addRow(applicationRows, 'Language', 'C/C++')
+    if (techStack.has('CMake')) addRow(applicationRows, 'Build Tool', 'CMake')
+    if (techStack.has('Go')) addRow(applicationRows, 'Language', 'Go')
+    if (techStack.has('Rust')) addRow(applicationRows, 'Language', 'Rust')
+    if (techStack.has('Scala')) addRow(applicationRows, 'Language', 'Scala')
+    if (techStack.has('sbt')) addRow(applicationRows, 'Build Tool', 'sbt')
+  }
+
+  if (frontendRows.length === 0 && backendRows.length === 0) {
+    const fallbackLanguage = analysis.primaryLanguage || repoInfo.language || TEXT.none
+    const hasSpecializedRows = [
+      libraryRows,
+      cliRows,
+      dataRows,
+      infrastructureRows,
+      applicationRows,
+    ].some((rows) => rows.length > 0)
+
+    if (!hasSpecializedRows) {
+      return formatMarkdownTable(tableHeaders, localizeRows([['Language', fallbackLanguage]]))
+    }
+  }
+
+  const sectionRows = [
+    ['frontend', frontendRows],
+    ['backend', backendRows],
+    ['library', libraryRows],
+    ['cli', cliRows],
+    ['data', dataRows],
+    ['infrastructure', infrastructureRows],
+    ['application', applicationRows],
+  ]
+
+  return sectionRows
+    .filter(([, rows]) => rows.length > 0)
+    .map(([section, rows]) =>
+      `### ${sectionLabels[section]}\n\n${formatMarkdownTable(tableHeaders, localizeRows(rows))}`
+    )
+    .join('\n\n')
 }
 
-const formatLicense = (license, lang = 'en') => {
+const formatLicense = (license) => {
   if (!license || license === 'None') {
-    return TEXT[lang].noLicense
+    return TEXT.noLicense
   }
 
-  return TEXT[lang].licenseText(license)
+  return TEXT.licenseText(license)
 }
 
-const isMissingCommand = (command, lang = 'en') => {
+const isMissingCommand = (command) => {
   if (!command) return true
 
   // 실제 명령어와 "감지된 명령어 없음" 안내 문구를 구분해 빈 코드 블록 생성을 피함
   return [
-    TEXT.en.noInstallCommand,
-    TEXT.en.noRunCommand,
-    TEXT.en.noBuildCommand,
-    TEXT.en.noTestCommand,
-    TEXT.ko.noInstallCommand,
-    TEXT.ko.noRunCommand,
-    TEXT.ko.noBuildCommand,
-    TEXT.ko.noTestCommand,
-    TEXT[lang].none,
+    TEXT.noInstallCommand,
+    TEXT.noRunCommand,
+    TEXT.noBuildCommand,
+    TEXT.noTestCommand,
+    TEXT.none,
   ].some((missingText) => command === missingText)
 }
 
-// README 생성에 활용할 핵심 파일 목록을 markdown 리스트 형태로 변환
-const formatImportantFiles = (readmeData, lang = 'en') => {
-  // 백엔드에서 정리한 핵심 파일 목록이 없으면 None으로 표시
-  const files = readmeData?.importantFiles || []
-  if (files.length === 0) {
-    return `- ${TEXT[lang].none}`
+const escapeMarkdownTableCell = (value) =>
+  String(value || '')
+    .replace(/\|/g, '\\|')
+    .replace(/\r?\n/g, '<br />')
+    .trim()
+
+const formatMarkdownTable = (headers, rows) => {
+  if (rows.length === 0) {
+    return ''
   }
-  return files
-    .slice(0, 8)
-    .map((file) => `- \`${file.path}\` - ${translate(file.reason, lang)}`)
-    .join('\n')
+
+  return [
+    `| ${headers.join(' | ')} |`,
+    `| ${headers.map(() => '---').join(' | ')} |`,
+    ...rows.map((row) => `| ${row.map(escapeMarkdownTableCell).join(' | ')} |`),
+  ].join('\n')
+}
+
+const pathCell = (path) => `\`${path}\``
+
+const isReadmePath = (path) => {
+  const filename = path.split('/').pop()?.toLowerCase() || ''
+  return filename === 'readme' || filename.startsWith('readme.')
+}
+
+const toReadableSubject = (value) =>
+  value
+    .replace(/\.(js|jsx|ts|tsx|py|java|kt|go|rb|php|cs|rs|swift|dart)$/i, '')
+    .replace(/(service|controller|router|route|handler|config|configuration|component|hook|model|entity|schema|middleware|validator|client|provider|adapter|repository|factory|mapper|parser|serializer|policy|guard|resolver|loader|plugin)$/i, '')
+    .replace(/([a-z0-9])([A-Z])/g, '$1 $2')
+    .replace(/[-_]+/g, ' ')
+    .trim()
+
+const IMPORTANT_FILE_DOMAINS = [
+  [/auth|login|oauth|jwt|session/i, '인증과 세션 관리'],
+  [/permission|role|policy|guard|acl|security/i, '권한과 보안 정책'],
+  [/user|account|profile/i, '사용자 계정과 프로필 관리'],
+  [/payment|billing|checkout|order/i, '결제와 주문 처리'],
+  [/cart|product|catalog|inventory/i, '상품과 재고 관리'],
+  [/upload|download|file|storage/i, '파일 업로드와 저장소 연동'],
+  [/mail|email|notification|push|message/i, '메시지와 알림 발송'],
+  [/search|filter|query/i, '검색과 필터링'],
+  [/i18n|locale|translation|language/i, '다국어와 지역화 처리'],
+  [/theme|style|design|layout/i, '화면 테마와 레이아웃 구성'],
+  [/socket|websocket|realtime|stream/i, '실시간 통신과 스트리밍'],
+  [/cache|redis/i, '캐시 데이터 처리'],
+  [/queue|worker|job|scheduler|cron/i, '비동기 작업과 스케줄링'],
+  [/analytics|metric|event|tracking/i, '이벤트 수집과 분석'],
+  [/report|export|import|csv|excel|pdf/i, '데이터 가져오기와 내보내기'],
+  [/log|logger|audit/i, '로그 기록과 감사 추적'],
+  [/admin|dashboard/i, '관리자 화면과 운영'],
+]
+
+const getDomainDescription = (path) => {
+  // 파일 경로에 포함된 도메인 단서를 README 설명 문구의 주어로 변환
+  const matchedDomain = IMPORTANT_FILE_DOMAINS.find(([pattern]) => pattern.test(path))
+  return matchedDomain?.[1] || ''
+}
+
+const describeImportantFile = (file) => {
+  // 파일 위치와 이름 규칙을 조합한 핵심 파일 설명 생성
+  const path = file.path
+  const filename = path.split('/').pop() || ''
+  const normalizedPath = path.toLowerCase()
+  const subject = toReadableSubject(filename)
+  const subjectPrefix = subject ? `${subject} ` : ''
+  const domainDescription = getDomainDescription(path)
+
+  if (/\/middlewares?\//.test(normalizedPath) || /middleware\.(js|ts|py|go|rb|php|java|kt|cs)$/i.test(filename)) {
+    return domainDescription
+      ? `${domainDescription}에 필요한 요청 전처리와 공통 검증을 담당합니다.`
+      : '요청 전처리, 인증, 로깅 같은 공통 미들웨어 처리를 담당합니다.'
+  }
+
+  if (/\/validators?\//.test(normalizedPath) || /validator\.(js|ts|py|java|kt|go|rb|php|cs)$/i.test(filename)) {
+    return domainDescription
+      ? `${domainDescription}에 필요한 입력값 검증 규칙을 정의합니다.`
+      : '입력값 검증 규칙과 요청 데이터 유효성 검사를 담당합니다.'
+  }
+
+  if (/\/dto\//.test(normalizedPath) || /\/dtos\//.test(normalizedPath) || /dto\.(js|ts|py|java|kt|cs)$/i.test(filename)) {
+    return '계층 간 데이터 전달 형식과 요청/응답 구조를 정의합니다.'
+  }
+
+  if (/\/clients?\//.test(normalizedPath) || /client\.(js|ts|py|java|kt|go|rb|php|cs)$/i.test(filename)) {
+    return domainDescription
+      ? `${domainDescription}에 필요한 외부 API 클라이언트 연동을 담당합니다.`
+      : '외부 API 클라이언트와 원격 서비스 호출을 담당합니다.'
+  }
+
+  if (/\/providers?\//.test(normalizedPath) || /provider\.(js|ts|py|java|kt|go|rb|php|cs)$/i.test(filename)) {
+    return '외부 의존성 주입과 서비스 제공자 구성을 담당합니다.'
+  }
+
+  if (/\/adapters?\//.test(normalizedPath) || /adapter\.(js|ts|py|java|kt|go|rb|php|cs)$/i.test(filename)) {
+    return '외부 시스템과 내부 도메인 로직 사이의 변환 계층을 담당합니다.'
+  }
+
+  if (/\/guards?\//.test(normalizedPath) || /guard\.(js|ts|py|java|kt|go|rb|php|cs)$/i.test(filename)) {
+    return domainDescription
+      ? `${domainDescription}에 필요한 접근 제어 규칙을 담당합니다.`
+      : '라우트와 기능 접근을 제어하는 보호 규칙을 담당합니다.'
+  }
+
+  if (/\/policies?\//.test(normalizedPath) || /policy\.(js|ts|py|java|kt|go|rb|php|cs)$/i.test(filename)) {
+    return domainDescription
+      ? `${domainDescription}에 필요한 정책과 권한 판단 기준을 정의합니다.`
+      : '비즈니스 정책과 권한 판단 기준을 정의합니다.'
+  }
+
+  if (/\/resolvers?\//.test(normalizedPath) || /resolver\.(js|ts|py|java|kt|go|rb|php|cs)$/i.test(filename)) {
+    return `${subjectPrefix}데이터 조회와 GraphQL/라우팅 해석을 담당합니다.`
+  }
+
+  if (/\/factories?\//.test(normalizedPath) || /factory\.(js|ts|py|java|kt|go|rb|php|cs)$/i.test(filename)) {
+    return `${subjectPrefix}객체 생성과 테스트 데이터 구성을 담당합니다.`
+  }
+
+  if (/\/mappers?\//.test(normalizedPath) || /mapper\.(js|ts|py|java|kt|go|rb|php|cs)$/i.test(filename)) {
+    return `${subjectPrefix}데이터 형식 변환과 계층 간 매핑을 담당합니다.`
+  }
+
+  if (/\/parsers?\//.test(normalizedPath) || /parser\.(js|ts|py|java|kt|go|rb|php|cs)$/i.test(filename)) {
+    return `${subjectPrefix}입력 데이터 파싱과 형식 해석을 담당합니다.`
+  }
+
+  if (/\/serializers?\//.test(normalizedPath) || /serializer\.(js|ts|py|java|kt|go|rb|php|cs)$/i.test(filename)) {
+    return `${subjectPrefix}응답 데이터 직렬화와 출력 형식 변환을 담당합니다.`
+  }
+
+  if (/(^|\/)(server|main|index|app|program)\.(js|ts|py|go|rb|php|java|kt|cs|rs|swift|dart)$/i.test(path)) {
+    return '애플리케이션 실행을 시작하는 진입점 역할을 담당합니다.'
+  }
+
+  if (/(^|\/)(config|configuration|settings)\.(js|ts|py|java|kt|rb|php|cs)$/i.test(path)) {
+    return '환경 변수와 애플리케이션 설정을 관리합니다.'
+  }
+
+  if (/(^|\/)(env|environment)\.(js|ts|py|java|kt|rb|php|cs)$/i.test(path)) {
+    return '실행 환경별 설정값과 환경 변수 구성을 관리합니다.'
+  }
+
+  if (/\/services?\//.test(normalizedPath) || /service\.(js|ts|py|java|kt|go|rb|php|cs)$/i.test(filename)) {
+    if (domainDescription) {
+      return `${domainDescription}을 담당하는 서비스 로직입니다.`
+    }
+
+    return `${subjectPrefix}비즈니스 로직과 데이터 처리를 담당합니다.`
+  }
+
+  if (/\/controllers?\//.test(normalizedPath) || /controller\.(js|ts|py|java|kt|go|rb|php|cs)$/i.test(filename)) {
+    if (domainDescription) {
+      return `${domainDescription}에 대한 요청과 응답 처리를 담당합니다.`
+    }
+
+    return `${subjectPrefix}요청 처리와 응답 생성을 담당합니다.`
+  }
+
+  if (/\/routes?\//.test(normalizedPath) || /router?\.(js|ts|py|go|rb|php)$/i.test(filename)) {
+    return 'API 엔드포인트와 라우팅 규칙을 정의합니다.'
+  }
+
+  if (/\/api\//.test(normalizedPath)) {
+    return 'API 요청 처리와 외부 서비스 연동을 담당합니다.'
+  }
+
+  if (/\/graphql\//.test(normalizedPath) || /graphql\.(js|ts|py|java|kt|go|rb|php|cs)$/i.test(filename)) {
+    return 'GraphQL 스키마, 리졸버, 데이터 조회 처리를 담당합니다.'
+  }
+
+  if (/\/components?\//.test(normalizedPath) || /component\.(jsx|tsx|js|ts)$/i.test(filename)) {
+    return `${subjectPrefix}화면을 구성하는 UI 컴포넌트입니다.`
+  }
+
+  if (/\/pages?\//.test(normalizedPath) || /\/views?\//.test(normalizedPath)) {
+    return `${subjectPrefix}페이지 화면과 사용자 인터페이스 구성을 담당합니다.`
+  }
+
+  if (/\/hooks?\//.test(normalizedPath)) {
+    return `${subjectPrefix}화면 상태와 재사용 가능한 클라이언트 로직을 관리합니다.`
+  }
+
+  if (/\/stores?\//.test(normalizedPath) || /\/state\//.test(normalizedPath)) {
+    return '애플리케이션 상태 관리 로직을 담당합니다.'
+  }
+
+  if (/\/contexts?\//.test(normalizedPath) || /context\.(jsx|tsx|js|ts)$/i.test(filename)) {
+    return '전역 상태와 컴포넌트 간 공유 컨텍스트를 관리합니다.'
+  }
+
+  if (/\/reducers?\//.test(normalizedPath) || /reducer\.(js|ts|jsx|tsx)$/i.test(filename)) {
+    return '상태 변경 규칙과 액션 처리 방식을 정의합니다.'
+  }
+
+  if (/\/models?\//.test(normalizedPath) || /\/entities?\//.test(normalizedPath) || /\/schemas?\//.test(normalizedPath)) {
+    if (domainDescription) {
+      return `${domainDescription}에 필요한 데이터 구조와 도메인 모델을 정의합니다.`
+    }
+
+    return `${subjectPrefix}데이터 구조와 도메인 모델을 정의합니다.`
+  }
+
+  if (/\/repositories?\//.test(normalizedPath) || /repository\.(js|ts|py|java|kt|go|rb|php|cs)$/i.test(filename)) {
+    if (domainDescription) {
+      return `${domainDescription}에 필요한 데이터 저장소 접근을 담당합니다.`
+    }
+
+    return `${subjectPrefix}데이터 저장소 접근과 조회 처리를 담당합니다.`
+  }
+
+  if (/\/migrations?\//.test(normalizedPath) || /\/seeds?\//.test(normalizedPath)) {
+    return '데이터베이스 스키마 변경과 초기 데이터 구성을 담당합니다.'
+  }
+
+  if (/\/fixtures?\//.test(normalizedPath) || /\/mocks?\//.test(normalizedPath)) {
+    return '테스트와 개발 환경에서 사용하는 예제 데이터를 제공합니다.'
+  }
+
+  if (/\/jobs?\//.test(normalizedPath) || /\/workers?\//.test(normalizedPath) || /\/schedulers?\//.test(normalizedPath)) {
+    return domainDescription
+      ? `${domainDescription}과 관련된 백그라운드 작업을 처리합니다.`
+      : '백그라운드 작업, 큐 처리, 주기적 실행을 담당합니다.'
+  }
+
+  if (/\/constants?\//.test(normalizedPath) || /constant\.(js|ts|py|java|kt|go|rb|php|cs)$/i.test(filename)) {
+    return '애플리케이션 전역에서 사용하는 상수 값을 정의합니다.'
+  }
+
+  if (/\/enums?\//.test(normalizedPath) || /enum\.(js|ts|py|java|kt|go|rb|php|cs)$/i.test(filename)) {
+    return '도메인 상태와 고정 선택값을 enum 형태로 정의합니다.'
+  }
+
+  if (/\/types?\//.test(normalizedPath) || /types?\.(ts|tsx)$/i.test(filename)) {
+    return '공통 타입과 인터페이스 정의를 관리합니다.'
+  }
+
+  if (/\/plugins?\//.test(normalizedPath) || /plugin\.(js|ts|py|java|kt|go|rb|php|cs)$/i.test(filename)) {
+    return '애플리케이션 확장 기능과 플러그인 초기화를 담당합니다.'
+  }
+
+  if (/\/loaders?\//.test(normalizedPath) || /loader\.(js|ts|py|java|kt|go|rb|php|cs)$/i.test(filename)) {
+    return '초기 데이터 로딩과 리소스 준비를 담당합니다.'
+  }
+
+  if (/\/utils?\//.test(normalizedPath) || /\/helpers?\//.test(normalizedPath)) {
+    return `${subjectPrefix}공통 처리에 사용하는 유틸리티 로직을 제공합니다.`
+  }
+
+  if (/\/cli\//.test(normalizedPath) || /\/commands?\//.test(normalizedPath) || /\/bin\//.test(normalizedPath)) {
+    return 'CLI 명령과 실행 보조 로직을 담당합니다.'
+  }
+
+  if (/\/tests?\//.test(normalizedPath) || /\.(test|spec)\./i.test(filename)) {
+    return '주요 기능의 동작을 검증하는 테스트 코드입니다.'
+  }
+
+  return file.reason || '프로젝트 동작 이해에 필요한 핵심 파일입니다.'
+}
+
+// README 생성에 활용할 핵심 파일 목록을 markdown 표 형태로 변환
+const formatImportantFiles = (readmeData) => {
+  // 백엔드에서 정리한 핵심 파일 목록이 없으면 None으로 표시
+  const files = (readmeData?.importantFiles || []).filter((file) => !isReadmePath(file.path))
+  if (files.length === 0) {
+    return TEXT.none
+  }
+
+  const headers = ['경로', '설명']
+  const rows = files
+    .slice(0, 10)
+    .map((file) => [
+      pathCell(file.path),
+      describeImportantFile(file),
+    ])
+
+  return formatMarkdownTable(headers, rows)
 }
 
 const formatCommandBlock = (commandEntries) => {
@@ -335,7 +793,7 @@ const formatCommandBlock = (commandEntries) => {
 }
 
 // package.json에서 추출한 실행 스크립트를 복사 가능한 bash 코드 블록으로 변환
-const formatScripts = (readmeData, lang = 'en') => {
+const formatScripts = (readmeData) => {
   const commands = readmeData?.analysis?.commands
 
   if (commands) {
@@ -344,7 +802,7 @@ const formatScripts = (readmeData, lang = 'en') => {
       ['run', commands.run],
       ['build', commands.build],
       ['test', commands.test],
-    ].filter(([, command]) => !isMissingCommand(command, lang))
+    ].filter(([, command]) => !isMissingCommand(command))
 
     if (commandEntries.length > 0) {
       return formatCommandBlock(commandEntries)
@@ -355,7 +813,7 @@ const formatScripts = (readmeData, lang = 'en') => {
   const scripts = readmeData?.analysis?.scripts || {}
   const scriptEntries = Object.entries(scripts)
   if (scriptEntries.length === 0) {
-    return `- ${TEXT[lang].none}`
+    return `- ${TEXT.none}`
   }
   const commandEntries = scriptEntries
     .slice(0, 6)
@@ -364,30 +822,136 @@ const formatScripts = (readmeData, lang = 'en') => {
   return formatCommandBlock(commandEntries)
 }
 
-// 전체 파일 트리에서 최상위 폴더 목록을 README 구조 섹션 형태로 변환
-const formatProjectStructure = (readmeData, lang = 'en') => {
-  const highlights = readmeData?.fileSummary?.structureHighlights || []
-
-  if (highlights.length > 0) {
-    return highlights
-      .slice(0, 12)
-      .map((item) => `- \`${item.path}\` - ${translate(item.description, lang)}`)
-      .join('\n')
+const inferStructureDescription = (path) => {
+  const normalizedPath = path.replace(/\/$/, '').toLowerCase()
+  const name = normalizedPath.split('/').pop()
+  const descriptions = {
+    src: '소스 코드',
+    app: '애플리케이션 라우팅 및 화면 구성',
+    public: '정적 파일',
+    components: 'UI 컴포넌트',
+    pages: '페이지 화면',
+    api: 'API 연동 및 요청 처리 코드',
+    backend: '백엔드 소스',
+    frontend: '프론트엔드 소스',
+    test: '테스트 코드',
+    tests: '테스트 코드',
+    docs: '문서',
   }
 
-  // 백엔드에서 정리한 최상위 폴더 목록이 없으면 None으로 표시
-  const directories = readmeData?.fileSummary?.topLevelDirectories || []
-  if (directories.length === 0) {
-    return `- ${TEXT[lang].none}`
-  }
-  return directories
-    .slice(0, 12)
-    .map((directory) => `- \`${directory}/\``)
-    .join('\n')
+  return descriptions[normalizedPath] || descriptions[name] || ''
 }
 
-const formatOverview = (repoInfo, lang = 'en') => {
-  const text = TEXT[lang]
+const createTreeNode = (name = '', type = 'tree') => ({
+  children: new Map(),
+  name,
+  type,
+})
+
+const buildStructureTree = (paths) => {
+  const root = createTreeNode()
+
+  // a/b/c 형태 경로의 root -> a -> b -> c 노드 누적
+  paths.forEach((item) => {
+    const parts = item.path.split('/').filter(Boolean)
+    let current = root
+
+    parts.forEach((part, index) => {
+      const isLast = index === parts.length - 1
+      const type = isLast ? item.type : 'tree'
+
+      if (!current.children.has(part)) {
+        current.children.set(part, createTreeNode(part, type))
+      }
+
+      current = current.children.get(part)
+
+      if (isLast) {
+        current.type = type
+      }
+    })
+  })
+
+  return root
+}
+
+const compareTreeNodes = ([nameA, nodeA], [nameB, nodeB]) => {
+  if (nodeA.type !== nodeB.type) {
+    return nodeA.type === 'tree' ? -1 : 1
+  }
+
+  return nameA.localeCompare(nameB)
+}
+
+const renderStructureTree = (node, options = {}) => {
+  const {
+    depth = 0,
+    maxChildren = 8,
+    maxDepth = 3,
+    prefix = '',
+    pathPrefix = '',
+  } = options
+
+  if (depth >= maxDepth) {
+    return []
+  }
+
+  // README 길이 제어를 위한 폴더 노드 전위 순회 렌더링
+  const children = Array.from(node.children.entries())
+    .filter(([, child]) => child.type === 'tree')
+    .sort(compareTreeNodes)
+  const visibleChildren = children.slice(0, maxChildren)
+  const hasHiddenChildren = children.length > visibleChildren.length
+  const rows = []
+
+  visibleChildren.forEach(([name, child], index) => {
+    const isLast = index === visibleChildren.length - 1 && !hasHiddenChildren
+    const branch = isLast ? '└── ' : '├── '
+    const childPath = pathPrefix ? `${pathPrefix}/${name}` : name
+    const displayName = child.type === 'tree' ? `${name}/` : name
+    const description = inferStructureDescription(childPath)
+    const suffix = depth === 0 && description ? ` # ${description}` : ''
+
+    rows.push(`${prefix}${branch}${displayName}${suffix}`)
+
+    const childPrefix = `${prefix}${isLast ? '    ' : '│   '}`
+    rows.push(
+      ...renderStructureTree(child, {
+        depth: depth + 1,
+        maxChildren,
+        maxDepth,
+        pathPrefix: childPath,
+        prefix: childPrefix,
+      })
+    )
+  })
+
+  if (hasHiddenChildren) {
+    rows.push(`${prefix}└── ...`)
+  }
+
+  return rows
+}
+
+// 전체 파일 트리에서 주요 폴더와 파일을 README 구조 섹션 형태로 변환
+const formatProjectStructure = (readmeData) => {
+  const structurePaths = readmeData?.fileSummary?.structurePaths || []
+
+  if (structurePaths.length === 0) {
+    return TEXT.none
+  }
+
+  const tree = buildStructureTree(structurePaths)
+  const lines = renderStructureTree(tree)
+
+  if (lines.length === 0) {
+    return TEXT.none
+  }
+
+  return `\`\`\`text\n.\n${lines.join('\n')}\n\`\`\``
+}
+
+const formatOverview = (repoInfo) => {
   // 상단 인용문과 중복되지 않도록 개요에는 저장소 설명만 간결하게 표시
   const lines = [
     repoInfo.description && repoInfo.description !== 'None'
@@ -396,27 +960,10 @@ const formatOverview = (repoInfo, lang = 'en') => {
   ].filter(Boolean)
 
   if (lines.length === 0) {
-    return text.none
+    return TEXT.none
   }
 
   return lines.join('\n\n')
-}
-
-const buildRepositoryInfo = (repoInfo, lang) => {
-  const text = TEXT[lang]
-  const repository = repoInfo.readmeData?.repository || {}
-
-  return [
-    `- ${text.fullName}: ${repoInfo.fullName}`,
-    `- ${text.description}: ${repoInfo.description}`,
-    `- ${text.language}: ${repository.language || repoInfo.language}`,
-    `- ${text.defaultBranch}: ${repoInfo.defaultBranch}`,
-    `- ${text.stars}: ${repoInfo.stars}`,
-    `- ${text.forks}: ${repoInfo.forks}`,
-    `- ${text.openIssues}: ${repoInfo.openIssues}`,
-    `- ${text.topics}: ${formatTopics(repoInfo.topics, lang)}`,
-    `- ${text.lastUpdated}: ${formatDate(repoInfo.updatedAt, lang)}`,
-  ].join('\n')
 }
 
 const buildProjectCommandBlock = (scripts) =>
@@ -430,55 +977,42 @@ const buildProjectCommandBlock = (scripts) =>
     .map(([name, command]) => `# ${name}\n${command}`)
     .join('\n\n')
 
-const buildBadgeHeader = (repoInfo) => `![GitHub stars](https://img.shields.io/github/stars/${repoInfo.fullName})
-![GitHub forks](https://img.shields.io/github/forks/${repoInfo.fullName})
-![GitHub license](https://img.shields.io/github/license/${repoInfo.fullName})
-![GitHub last commit](https://img.shields.io/github/last-commit/${repoInfo.fullName})
-![GitHub issues](https://img.shields.io/github/issues/${repoInfo.fullName})
-![GitHub top language](https://img.shields.io/github/languages/top/${repoInfo.fullName})`
-
-const buildStandardSections = (repoInfo, lang, sections) => {
-  const text = TEXT[lang]
-  const scripts = extractScripts(repoInfo, lang)
+const buildStandardSections = (repoInfo, sections) => {
+  const scripts = extractScripts(repoInfo)
 
   // 각 formatter가 섹션 본문만 만들고, 여기서 최종 README 섹션 순서를 결정
   return [
     `# ${repoInfo.name}`,
-    buildBadgeHeader(repoInfo),
     repoInfo.description && repoInfo.description !== 'None' ? `> ${repoInfo.description}` : '',
-    sectionBlock(sections, 'overview', text.overview, formatOverview(repoInfo, lang)),
-    sectionBlock(sections, 'repositoryInfo', text.repositoryInfo, buildRepositoryInfo(repoInfo, lang)),
-    sectionBlock(sections, 'techStack', text.techStack, formatTechStack(repoInfo, lang)),
-    sectionBlock(sections, 'features', text.features, formatFeatures(repoInfo, lang)),
+    sectionBlock(sections, 'overview', TEXT.overview, formatOverview(repoInfo)),
+    sectionBlock(sections, 'features', TEXT.features, formatFeatures(repoInfo)),
+    sectionBlock(sections, 'techStack', TEXT.techStack, formatTechStack(repoInfo)),
     sectionBlock(
       sections,
       'projectStructure',
-      text.projectStructure,
-      formatProjectStructure(repoInfo.readmeData, lang)
+      TEXT.projectStructure,
+      formatProjectStructure(repoInfo.readmeData)
     ),
     sectionBlock(
       sections,
       'importantFiles',
-      text.importantFiles,
-      formatImportantFiles(repoInfo.readmeData, lang)
+      TEXT.importantFiles,
+      formatImportantFiles(repoInfo.readmeData)
     ),
     sectionBlock(
       sections,
       'scripts',
-      text.availableScripts,
-      formatScripts(repoInfo.readmeData, lang) || `\`\`\`bash\n${buildProjectCommandBlock(scripts)}\n\`\`\``
+      TEXT.availableScripts,
+      formatScripts(repoInfo.readmeData) || `\`\`\`bash\n${buildProjectCommandBlock(scripts)}\n\`\`\``
     ),
-    sectionBlock(sections, 'license', text.license, formatLicense(repoInfo.license, lang)),
+    sectionBlock(sections, 'license', TEXT.license, formatLicense(repoInfo.license)),
+    sectionBlock(sections, 'link', TEXT.link, `[GitHub Repository](${repoInfo.url})`),
   ]
 }
 
 const buildMarkdown = (repoInfo, options) => {
-  const language = options.language === 'en' ? 'en' : 'ko'
-  // 최종 markdown은 선택된 표준 섹션과 저장소 링크 섹션을 합쳐 하나의 문서로 반환
-  return joinBlocks([
-    ...buildStandardSections(repoInfo, language, options.sections),
-    `## ${TEXT[language].link}\n\n[GitHub Repository](${repoInfo.url})`,
-  ]) + '\n'
+  // 최종 markdown은 선택된 표준 섹션을 요청한 순서대로 합쳐 하나의 문서로 반환
+  return `${joinBlocks(buildStandardSections(repoInfo, options.sections))}\n`
 }
 
 const parseStreamBuffer = (buffer, onEvent) => {

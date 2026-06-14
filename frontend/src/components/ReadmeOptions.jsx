@@ -2,13 +2,13 @@ import { CheckIcon } from './Icons.jsx'
 
 const SECTION_OPTIONS = [
   { key: 'overview', label: '개요' },
-  { key: 'repositoryInfo', label: '저장소 정보' },
-  { key: 'techStack', label: '기술 스택' },
   { key: 'features', label: '주요 기능' },
+  { key: 'techStack', label: '기술 스택' },
   { key: 'projectStructure', label: '프로젝트 구조' },
   { key: 'importantFiles', label: '핵심 파일' },
-  { key: 'scripts', label: '실행 스크립트' },
+  { key: 'scripts', label: '설치 및 실행 방법' },
   { key: 'license', label: '라이선스' },
+  { key: 'link', label: '링크' },
 ]
 
 function ReadmeOptions({ sections, selectedCount, totalCount, onSectionToggle }) {

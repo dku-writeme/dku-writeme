@@ -85,6 +85,14 @@ export const FILE_PRIORITY_RULES = {
     '*.fsproj',
     '*.vbproj',
     '*.sln',
+    // Swift
+    'Package.swift',
+    // Dart / Flutter
+    'pubspec.yaml',
+    // Scala
+    'build.sbt',
+    // C/C++
+    'CMakeLists.txt',
   ],
 
   // ── Lock 파일 ────────────────────────────────
@@ -220,6 +228,30 @@ export const FILE_PRIORITY_RULES = {
     // .NET
     'Program.cs',
     'Startup.cs',
+    // Ruby / Rails
+    'config/routes.rb',
+    'app/controllers/application_controller.rb',
+    'app/models/application_record.rb',
+    // PHP / Laravel
+    'artisan',
+    'routes/web.php',
+    'routes/api.php',
+    'app/Http/Controllers/Controller.php',
+    // Swift
+    'Sources/main.swift',
+    'Sources/App/main.swift',
+    'Package.swift',
+    // Dart / Flutter
+    'lib/main.dart',
+    'pubspec.yaml',
+    // Scala
+    'src/main/scala/Main.scala',
+    'build.sbt',
+    // C/C++
+    'src/main.cpp',
+    'main.cpp',
+    'main.c',
+    'CMakeLists.txt',
   ],
 };
 
@@ -273,6 +305,18 @@ export const PROJECT_SIGNATURES = {
   cpp: {
     files: ['CMakeLists.txt', 'Makefile'],
     exts:  ['.cpp', '.cc', '.cxx', '.c', '.h', '.hpp'],
+  },
+  swift: {
+    files: ['Package.swift'],
+    exts:  ['.swift'],
+  },
+  dart: {
+    files: ['pubspec.yaml'],
+    exts:  ['.dart'],
+  },
+  scala: {
+    files: ['build.sbt'],
+    exts:  ['.scala'],
   },
 };
 

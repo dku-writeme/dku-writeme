@@ -15,6 +15,51 @@ function getTopLevelDirectories(files) {
   return Array.from(directories).sort()
 }
 
+function getStructurePaths(files) {
+  // README 구조 섹션은 폴더 중심으로 보여주기 위해 설정/lock 파일은 제외
+  const excludedFilenames = new Set([
+    '.dockerignore',
+    '.env',
+    '.env.local',
+    '.env.development',
+    '.env.production',
+    '.env.test',
+    '.eslintignore',
+    '.eslintrc',
+    '.eslintrc.js',
+    '.eslintrc.cjs',
+    '.eslintrc.json',
+    '.gitignore',
+    '.npmrc',
+    '.prettierignore',
+    '.prettierrc',
+    '.prettierrc.js',
+    '.prettierrc.cjs',
+    '.prettierrc.json',
+    'package-lock.json',
+    'pnpm-lock.yaml',
+    'yarn.lock',
+  ])
+
+  return files
+    .filter((file) => {
+      const depth = file.path.split('/').length
+      const filename = file.path.split('/').pop()
+
+      if (file.type === 'tree') {
+        return depth <= 4
+      }
+
+      return depth <= 4 && file.path.includes('/') && !excludedFilenames.has(filename)
+    })
+    .sort((left, right) => left.path.localeCompare(right.path))
+    .slice(0, 500)
+    .map((file) => ({
+      path: file.path,
+      type: file.type,
+    }))
+}
+
 function findFileByName(fileContents, filename) {
   // 조회된 파일 내용 목록에서 파일명과 일치하는 파일을 찾음
   return fileContents.find((file) => {
@@ -64,12 +109,17 @@ const PYTHON_TECH_STACK_PACKAGES = {
   django: 'Django',
   fastapi: 'FastAPI',
   flask: 'Flask',
+  matplotlib: 'Matplotlib',
   numpy: 'NumPy',
   pandas: 'Pandas',
   pydantic: 'Pydantic',
   pytest: 'pytest',
   requests: 'Requests',
+  scikit: 'scikit-learn',
+  sklearn: 'scikit-learn',
   sqlalchemy: 'SQLAlchemy',
+  tensorflow: 'TensorFlow',
+  torch: 'PyTorch',
   uvicorn: 'Uvicorn',
 }
 
@@ -87,9 +137,14 @@ function parsePackageJson(fileContents) {
   const mergedPackageJson = {
     name: null,
     version: null,
+    type: null,
+    engines: {},
     scripts: {},
     dependencies: new Set(),
     devDependencies: new Set(),
+    dependencyVersions: {},
+    // Library/CLI 기술 스택 구분용 main/module/types/bin 엔트리포인트
+    entrypoints: {},
   }
 
   try {
@@ -99,24 +154,42 @@ function parsePackageJson(fileContents) {
 
       mergedPackageJson.name ||= packageJson.name || null
       mergedPackageJson.version ||= packageJson.version || null
+      mergedPackageJson.type ||= packageJson.type || null
+      mergedPackageJson.entrypoints = {
+        ...mergedPackageJson.entrypoints,
+        main: mergedPackageJson.entrypoints.main || packageJson.main || null,
+        module: mergedPackageJson.entrypoints.module || packageJson.module || null,
+        types: mergedPackageJson.entrypoints.types || packageJson.types || packageJson.typings || null,
+        bin: mergedPackageJson.entrypoints.bin || packageJson.bin || null,
+      }
+      mergedPackageJson.engines = {
+        ...mergedPackageJson.engines,
+        ...(packageJson.engines || {}),
+      }
       mergedPackageJson.scripts = {
         ...mergedPackageJson.scripts,
         ...(packageJson.scripts || {}),
       }
-      Object.keys(packageJson.dependencies || {}).forEach((name) => {
+      Object.entries(packageJson.dependencies || {}).forEach(([name, version]) => {
         mergedPackageJson.dependencies.add(name)
+        mergedPackageJson.dependencyVersions[name] = version
       })
-      Object.keys(packageJson.devDependencies || {}).forEach((name) => {
+      Object.entries(packageJson.devDependencies || {}).forEach(([name, version]) => {
         mergedPackageJson.devDependencies.add(name)
+        mergedPackageJson.dependencyVersions[name] = version
       })
     })
 
     return {
       name: mergedPackageJson.name,
       version: mergedPackageJson.version,
+      type: mergedPackageJson.type,
+      engines: mergedPackageJson.engines,
       scripts: mergedPackageJson.scripts,
       dependencies: Array.from(mergedPackageJson.dependencies),
       devDependencies: Array.from(mergedPackageJson.devDependencies),
+      dependencyVersions: mergedPackageJson.dependencyVersions,
+      entrypoints: mergedPackageJson.entrypoints,
     }
   } catch (error) {
     console.error('package.json 분석 중 오류가 발생했습니다: ', error)
@@ -139,11 +212,19 @@ function hasDependencyText(content, dependencyName) {
 
 function getPrimaryLanguage(repoInfo, files) {
   if (hasPath(files, /\.java$/)) return 'Java'
+  if (hasPath(files, /\.kt$/)) return 'Kotlin'
   if (hasPath(files, /\.tsx?$/)) return 'TypeScript'
   if (hasPath(files, /\.jsx?$/)) return 'JavaScript'
   if (hasPath(files, /\.py$/)) return 'Python'
   if (hasPath(files, /\.go$/)) return 'Go'
   if (hasPath(files, /\.rs$/)) return 'Rust'
+  if (hasPath(files, /\.rb$/)) return 'Ruby'
+  if (hasPath(files, /\.php$/)) return 'PHP'
+  if (hasPath(files, /\.(cs|fs|vb)$/)) return 'C#'
+  if (hasPath(files, /\.swift$/)) return 'Swift'
+  if (hasPath(files, /\.dart$/)) return 'Dart'
+  if (hasPath(files, /\.scala$/)) return 'Scala'
+  if (hasPath(files, /\.(cpp|cc|cxx|c|hpp|h)$/)) return 'C/C++'
   return repoInfo.language
 }
 
@@ -156,6 +237,13 @@ function detectBuildTools(files) {
   if (hasFile(files, 'requirements.txt') || hasFile(files, 'pyproject.toml')) tools.push('Python')
   if (hasFile(files, 'go.mod')) tools.push('Go modules')
   if (hasFile(files, 'Cargo.toml')) tools.push('Cargo')
+  if (hasFile(files, 'Gemfile')) tools.push('Bundler')
+  if (hasFile(files, 'composer.json')) tools.push('Composer')
+  if (hasPath(files, /\.(csproj|fsproj|vbproj|sln)$/)) tools.push('.NET CLI')
+  if (hasFile(files, 'Package.swift')) tools.push('Swift Package Manager')
+  if (hasFile(files, 'pubspec.yaml')) tools.push('Dart pub')
+  if (hasFile(files, 'CMakeLists.txt')) tools.push('CMake')
+  if (hasFile(files, 'build.sbt')) tools.push('sbt')
 
   return tools
 }
@@ -173,6 +261,7 @@ function detectTechStack(repoInfo, files, selectedFileContents, packageJson) {
   if (hasFile(files, 'package.json')) stack.add('Node.js')
   if (hasPath(files, /\.tsx?$/) || nodePackages.has('typescript')) stack.add('TypeScript')
 
+  // 파일 경로와 선택된 핵심 파일 내용을 함께 사용한 프레임워크/인프라 기술 감지
   if (
     /spring-boot|org\.springframework\.boot/i.test(allContent) ||
     hasDependencyText(allContent, 'spring-boot-starter') ||
@@ -182,6 +271,8 @@ function detectTechStack(repoInfo, files, selectedFileContents, packageJson) {
   }
   if (/jquery|\$\(/i.test(allContent)) stack.add('jQuery')
   if (/from\s+fastapi\s+import|import\s+fastapi/i.test(allContent)) stack.add('FastAPI')
+  if (/from\s+django|django\./i.test(allContent)) stack.add('Django')
+  if (/from\s+flask\s+import|import\s+flask/i.test(allContent)) stack.add('Flask')
   if (/thymeleaf/i.test(allContent) || hasPath(files, /src\/main\/resources\/templates\//)) {
     stack.add('Thymeleaf')
   }
@@ -189,6 +280,21 @@ function detectTechStack(repoInfo, files, selectedFileContents, packageJson) {
   if (/mysql/i.test(allContent) || hasPath(files, /mysql/i)) stack.add('MySQL')
   if (/postgres/i.test(allContent) || hasPath(files, /postgres/i)) stack.add('PostgreSQL')
   if (hasFile(files, 'Dockerfile') || hasFile(files, 'docker-compose.yml')) stack.add('Docker')
+  if (hasPath(files, /\.kt$/)) stack.add('Kotlin')
+  if (hasPath(files, /\.swift$/)) stack.add('Swift')
+  if (hasFile(files, 'Package.swift')) stack.add('Swift Package Manager')
+  if (hasPath(files, /\.dart$/) || hasFile(files, 'pubspec.yaml')) stack.add('Dart')
+  if (/flutter:/i.test(allContent) || hasPath(files, /(^|\/)lib\/main\.dart$/)) stack.add('Flutter')
+  if (hasPath(files, /\.rb$/) || hasFile(files, 'Gemfile')) stack.add('Ruby')
+  if (/rails|actionpack|activerecord/i.test(allContent) || hasFile(files, 'config.ru')) stack.add('Ruby on Rails')
+  if (hasPath(files, /\.php$/) || hasFile(files, 'composer.json')) stack.add('PHP')
+  if (/laravel\/framework|Illuminate\\/i.test(allContent) || hasFile(files, 'artisan')) stack.add('Laravel')
+  if (hasPath(files, /\.(cs|fs|vb)$/) || hasPath(files, /\.(csproj|fsproj|vbproj|sln)$/)) stack.add('.NET')
+  if (/Microsoft\.AspNetCore|WebApplication\.CreateBuilder/i.test(allContent)) stack.add('ASP.NET Core')
+  if (hasPath(files, /\.(cpp|cc|cxx|c|hpp|h)$/)) stack.add('C/C++')
+  if (hasFile(files, 'CMakeLists.txt')) stack.add('CMake')
+  if (hasPath(files, /\.scala$/) || hasFile(files, 'build.sbt')) stack.add('Scala')
+  if (hasFile(files, 'build.sbt')) stack.add('sbt')
 
   nodePackages.forEach((name) => {
     const stackName = NODE_TECH_STACK_PACKAGES[name]
@@ -208,6 +314,10 @@ function detectTechStack(repoInfo, files, selectedFileContents, packageJson) {
 
 function detectProjectType(files, techStack) {
   if (techStack.includes('Spring Boot')) return 'Spring Boot web application'
+  if (techStack.includes('Ruby on Rails')) return 'Ruby on Rails web application'
+  if (techStack.includes('Laravel')) return 'Laravel web application'
+  if (techStack.includes('ASP.NET Core')) return 'ASP.NET Core web application'
+  if (techStack.includes('Flutter')) return 'Flutter application'
   if (hasFile(files, 'package.json') && hasPath(files, /(^|\/)(pages|app|components)\//)) {
     return 'Frontend application'
   }
@@ -215,10 +325,18 @@ function detectProjectType(files, techStack) {
   if (hasFile(files, 'pyproject.toml') || hasFile(files, 'requirements.txt')) return 'Python project'
   if (hasFile(files, 'go.mod')) return 'Go project'
   if (hasFile(files, 'Cargo.toml')) return 'Rust project'
+  if (hasFile(files, 'Gemfile')) return 'Ruby project'
+  if (hasFile(files, 'composer.json')) return 'PHP project'
+  if (hasPath(files, /\.(csproj|fsproj|vbproj|sln)$/)) return '.NET project'
+  if (hasFile(files, 'Package.swift')) return 'Swift project'
+  if (hasFile(files, 'pubspec.yaml')) return 'Dart project'
+  if (hasFile(files, 'CMakeLists.txt')) return 'C/C++ project'
+  if (hasFile(files, 'build.sbt')) return 'Scala project'
   return 'Unknown'
 }
 
 function detectCommands(files, packageJson, techStack) {
+  // 실제 package.json scripts가 있으면 추정 명령어보다 저장소 정의를 우선 사용
   if (packageJson) {
     const scripts = packageJson.scripts || {}
     const runScript = scripts.dev ? 'npm run dev' : scripts.start ? 'npm start' : scripts.serve ? 'npm run serve' : null
@@ -237,6 +355,7 @@ function detectCommands(files, packageJson, techStack) {
   const gradle = hasFile(files, 'gradlew') ? './gradlew' : 'gradle'
   const isSpringBoot = techStack.includes('Spring Boot')
 
+  // 언어별 대표 빌드 파일을 기준으로 설치/실행/빌드/테스트 명령어 추론
   if (hasMaven) {
     return {
       install: `${maven} dependency:resolve`,
@@ -261,6 +380,96 @@ function detectCommands(files, packageJson, techStack) {
       run: null,
       build: null,
       test: 'pytest',
+    }
+  }
+
+  if (hasFile(files, 'pyproject.toml')) {
+    return {
+      install: 'pip install -e .',
+      run: techStack.includes('FastAPI') ? 'uvicorn main:app --reload' : null,
+      build: 'python -m build',
+      test: 'pytest',
+    }
+  }
+
+  if (hasFile(files, 'go.mod')) {
+    return {
+      install: 'go mod download',
+      run: 'go run .',
+      build: 'go build ./...',
+      test: 'go test ./...',
+    }
+  }
+
+  if (hasFile(files, 'Cargo.toml')) {
+    return {
+      install: 'cargo fetch',
+      run: 'cargo run',
+      build: 'cargo build',
+      test: 'cargo test',
+    }
+  }
+
+  if (hasFile(files, 'Gemfile')) {
+    return {
+      install: 'bundle install',
+      run: techStack.includes('Ruby on Rails') ? 'bin/rails server' : 'ruby app.rb',
+      build: null,
+      test: 'bundle exec rspec',
+    }
+  }
+
+  if (hasFile(files, 'composer.json')) {
+    return {
+      install: 'composer install',
+      run: techStack.includes('Laravel') ? 'php artisan serve' : 'php -S localhost:8000',
+      build: null,
+      test: 'vendor/bin/phpunit',
+    }
+  }
+
+  if (hasPath(files, /\.(csproj|fsproj|vbproj|sln)$/)) {
+    return {
+      install: 'dotnet restore',
+      run: 'dotnet run',
+      build: 'dotnet build',
+      test: 'dotnet test',
+    }
+  }
+
+  if (hasFile(files, 'pubspec.yaml')) {
+    return {
+      install: 'dart pub get',
+      run: techStack.includes('Flutter') ? 'flutter run' : 'dart run',
+      build: techStack.includes('Flutter') ? 'flutter build' : 'dart compile exe',
+      test: techStack.includes('Flutter') ? 'flutter test' : 'dart test',
+    }
+  }
+
+  if (hasFile(files, 'Package.swift')) {
+    return {
+      install: 'swift package resolve',
+      run: 'swift run',
+      build: 'swift build',
+      test: 'swift test',
+    }
+  }
+
+  if (hasFile(files, 'CMakeLists.txt')) {
+    return {
+      install: 'cmake -S . -B build',
+      run: null,
+      build: 'cmake --build build',
+      test: 'ctest --test-dir build',
+    }
+  }
+
+  if (hasFile(files, 'build.sbt')) {
+    return {
+      install: 'sbt update',
+      run: 'sbt run',
+      build: 'sbt compile',
+      test: 'sbt test',
     }
   }
 
@@ -575,6 +784,7 @@ export function organizeReadmeData(repoInfo, files, selectedFiles, selectedFileC
       contentCount: selectedFileContents.length,
       topLevelDirectories: getTopLevelDirectories(files),
       structureHighlights: getStructureHighlights(files),
+      structurePaths: getStructurePaths(files),
     },
     // README 생성에 필요하다고 선별된 핵심 파일 목록
     importantFiles: selectedFiles.map((file) => ({
@@ -598,9 +808,13 @@ export function organizeReadmeData(repoInfo, files, selectedFiles, selectedFileC
       hasExistingReadme: Boolean(existingReadme),
       packageName: packageJson?.name || null,
       packageVersion: packageJson?.version || null,
+      packageType: packageJson?.type || null,
+      packageEntrypoints: packageJson?.entrypoints || {},
+      engines: packageJson?.engines || {},
       scripts: packageJson?.scripts || {},
       dependencies: packageJson?.dependencies || [],
       devDependencies: packageJson?.devDependencies || [],
+      dependencyVersions: packageJson?.dependencyVersions || {},
       projectType,
       primaryLanguage,
       buildTools,
@@ -611,11 +825,14 @@ export function organizeReadmeData(repoInfo, files, selectedFiles, selectedFileC
       monorepo: repositoryAnalysis.selection.monorepo,
       totalTokens: repositoryAnalysis.selection.totalTokens,
       suggestedSections: [
-        '프로젝트 소개',
-        '주요 기능',
-        '기술 스택',
-        '실행 스크립트',
-        '라이선스',
+        '📌 개요',
+        '✨ 주요 기능',
+        '🛠 기술 스택',
+        '📁 프로젝트 구조',
+        '🔑 핵심 파일',
+        '🚀 설치 및 실행 방법',
+        '📄 라이선스',
+        '🔗 링크',
       ],
     },
     // C: HuggingFace README 생성 프롬프트에 바로 전달할 수 있는 모델 입력
