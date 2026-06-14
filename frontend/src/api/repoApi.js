@@ -1285,7 +1285,18 @@ const parseStreamBuffer = (buffer, onEvent) => {
     .map((line) => line.trim())
     .filter(Boolean)
     .forEach((line) => {
-      onEvent(JSON.parse(line))
+      let event
+
+      // JSON 파싱 실패와 서버가 보낸 error 이벤트를 구분해 실제 원인을 보존
+      try {
+        event = JSON.parse(line)
+      } catch (error) {
+        throw new Error(`스트리밍 응답을 해석하지 못했습니다: ${error.message}`, {
+          cause: error,
+        })
+      }
+
+      onEvent(event)
     })
 
   return remainingBuffer

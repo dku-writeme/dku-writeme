@@ -177,16 +177,6 @@ async def analyze(req: AnalyzeRequest):
     except ValueError as error:
         raise HTTPException(status_code=422, detail=str(error)) from error
     
-    print("\n" + "="*40)
-    print("🚀 [AI SERVER] analyze 함수 반환 값 확인")
-    print("="*40)
-    print(f"💬 Summary:\n{summary}")
-    print("-"*40)
-    print(f"📝 Description:\n{description}")
-    print("-"*40)
-    print(f"⚡ Features:\n{features}")
-    print("="*40 + "\n")
-
     return {
         "summary": summary,
         "description": description,

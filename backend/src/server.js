@@ -329,7 +329,6 @@ function githubErrorMessage(error) {
 }
 
 async function analyzeRepositoryWithAi(repoInfo, selectedFileContents) {
-  let description = repoInfo.description
   let summary = normalizeAiText(repoInfo.description)
   let features = null
   const startedAt = Date.now()
@@ -354,9 +353,8 @@ async function analyzeRepositoryWithAi(repoInfo, selectedFileContents) {
 
     if (aiResponse.ok) {
       const aiResult = await aiResponse.json()
-      // README 상단 인용문은 별도 요약을 우선 사용하고, description은 기존 의미 유지
+      // description은 GitHub 원본 값을 유지하고, AI 요약은 README 상단 인용문에만 사용
       summary = normalizeAiText(aiResult.summary) || summary
-      description = normalizeAiText(aiResult.description) || description
       features = normalizeAiFeatures(aiResult.features)
       status = 'success'
       message = 'AI 분석이 완료되었습니다.'
@@ -379,7 +377,6 @@ async function analyzeRepositoryWithAi(repoInfo, selectedFileContents) {
 
   return {
     summary,
-    description,
     features,
     status,
     usedAi: status === 'success',
