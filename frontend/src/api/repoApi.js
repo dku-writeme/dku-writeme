@@ -71,6 +71,77 @@ const sectionBlock = (sections, key, title, content) => {
 
 const joinBlocks = (blocks) => blocks.filter(Boolean).join('\n\n')
 
+const BADGE_STYLE = 'flat-square'
+const LANGUAGE_BADGE_COLORS = {
+  JavaScript: 'f7df1e',
+  TypeScript: '3178c6',
+  Python: '3776ab',
+  Java: '007396',
+  Kotlin: '7f52ff',
+  Swift: 'f05138',
+  Dart: '0175c2',
+  Go: '00add8',
+  Rust: 'dea584',
+  Ruby: 'cc342d',
+  PHP: '777bb4',
+}
+
+const normalizeBadgeValue = (value) => {
+  const normalizedValue = String(value || '').trim()
+
+  return normalizedValue && normalizedValue !== 'None' ? normalizedValue : ''
+}
+
+const getRepositoryFullName = (repoInfo) => {
+  const fullName = normalizeBadgeValue(
+    repoInfo.fullName || repoInfo.readmeData?.repository?.fullName
+  )
+
+  if (fullName) {
+    return fullName
+  }
+
+  const matchedUrl = normalizeBadgeValue(repoInfo.url).match(/github\.com\/([^/]+\/[^/#?]+)/i)
+
+  return matchedUrl?.[1] || ''
+}
+
+const encodeBadgePath = (value) =>
+  value
+    .split('/')
+    .map((segment) => encodeURIComponent(segment))
+    .join('/')
+
+const escapeStaticBadgeSegment = (value) =>
+  encodeURIComponent(String(value).replace(/-/g, '--').replace(/_/g, '__').replace(/\s+/g, '_'))
+
+const createStaticBadge = (label, message, color = 'blue') =>
+  `![${label}](https://img.shields.io/badge/${escapeStaticBadgeSegment(label)}-${escapeStaticBadgeSegment(message)}-${color}?style=${BADGE_STYLE})`
+
+const formatReadmeBadges = (repoInfo) => {
+  const repository = repoInfo.readmeData?.repository || {}
+  const fullName = getRepositoryFullName(repoInfo)
+  const encodedRepositoryPath = fullName ? encodeBadgePath(fullName) : ''
+  const language = normalizeBadgeValue(
+    repoInfo.language || repository.language || repoInfo.readmeData?.analysis?.primaryLanguage
+  )
+  const license = normalizeBadgeValue(repoInfo.license || repository.license)
+
+  if (encodedRepositoryPath) {
+    return [
+      language ? `![GitHub top language](https://img.shields.io/github/languages/top/${encodedRepositoryPath}?style=${BADGE_STYLE})` : '',
+      license ? `![GitHub License](https://img.shields.io/github/license/${encodedRepositoryPath}?style=${BADGE_STYLE})` : '',
+      `![GitHub stars](https://img.shields.io/github/stars/${encodedRepositoryPath}?style=${BADGE_STYLE})`,
+      `![GitHub forks](https://img.shields.io/github/forks/${encodedRepositoryPath}?style=${BADGE_STYLE})`,
+    ].filter(Boolean).join(' ')
+  }
+
+  return [
+    language ? createStaticBadge('language', language, LANGUAGE_BADGE_COLORS[language] || 'blue') : '',
+    license ? createStaticBadge('license', license, 'blue') : '',
+  ].filter(Boolean).join(' ')
+}
+
 const FEATURE_TITLE_TRANSLATIONS = new Map([
   ['weather data', '날씨 정보 조회'],
   ['weather information', '날씨 정보 조회'],
@@ -1389,6 +1460,7 @@ const buildStandardSections = (repoInfo, sections) => {
   // 각 formatter가 섹션 본문만 만들고, 여기서 최종 README 섹션 순서를 결정
   return [
     `# ${repoInfo.name}`,
+    formatReadmeBadges(repoInfo),
     readmeSummary ? `> ${readmeSummary}` : '',
     sectionBlock(sections, 'overview', TEXT.overview, formatOverview(repoInfo)),
     sectionBlock(sections, 'features', TEXT.features, formatFeatures(repoInfo)),
