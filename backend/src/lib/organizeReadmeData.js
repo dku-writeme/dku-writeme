@@ -154,6 +154,66 @@ const PYTHON_TECH_STACK_PACKAGES = {
   uvicorn: 'Uvicorn',
 }
 
+function normalizePackageName(name = '') {
+  return String(name)
+    .trim()
+    .toLowerCase()
+    .replace(/_/g, '-')
+}
+
+function parseDependencyName(value = '') {
+  const withoutComment = String(value).split('#')[0].split(';')[0].trim()
+  const match = withoutComment.match(/^([A-Za-z0-9_.-]+)/)
+
+  return match ? normalizePackageName(match[1]) : null
+}
+
+function parsePythonDependencies(fileContents) {
+  const dependencies = new Set()
+
+  fileContents.forEach((file) => {
+    const filename = file.path.split('/').pop().toLowerCase()
+    const content = String(file.content || '')
+
+    if (/^requirements.*\.txt$/.test(filename)) {
+      content
+        .split(/\r?\n/)
+        .map(parseDependencyName)
+        .filter(Boolean)
+        .forEach((name) => dependencies.add(name))
+      return
+    }
+
+    if (filename === 'pyproject.toml' || filename === 'pipfile' || filename === 'setup.py') {
+      ;[...content.matchAll(/["']([A-Za-z0-9_.-]+)(?:\[[^\]]+\])?(?:[<>=~!;,\s].*?)?["']/g)]
+        .map((match) => parseDependencyName(match[1]))
+        .filter(Boolean)
+        .forEach((name) => dependencies.add(name))
+    }
+  })
+
+  return dependencies
+}
+
+function contentForFiles(fileContents, predicate) {
+  return fileContents
+    .filter((file) => predicate(file.path, file))
+    .map((file) => file.content || '')
+    .join('\n')
+}
+
+function dependencyManifestContent(fileContents) {
+  return contentForFiles(fileContents, (path) =>
+    /(^|\/)(package\.json|requirements.*\.txt|pyproject\.toml|Pipfile|setup\.py|pom\.xml|build\.gradle(\.kts)?|Gemfile|composer\.json|pubspec\.yaml|.*\.(csproj|fsproj|vbproj))$/.test(path)
+  )
+}
+
+function runtimeConfigContent(fileContents) {
+  return contentForFiles(fileContents, (path) =>
+    /(^|\/)(application\.(properties|ya?ml)|database\.ya?ml|docker-compose\.ya?ml|\.env(\.[\w-]+)?\.(example|sample|template))$/.test(path)
+  )
+}
+
 function parsePackageJson(fileContents) {
   // 여러 package.json이 있으면 의존성과 스크립트를 합쳐 기술 스택 탐지에 활용
   const packageFiles = fileContents.filter((file) => {
@@ -238,12 +298,19 @@ function parsePackageContexts(fileContents) {
         return {
           dir: getFileDirectory(file.path),
           name: packageJson.name || null,
+          type: packageJson.type || null,
           scripts: packageJson.scripts || {},
           dependencies: Object.keys(packageJson.dependencies || {}),
           devDependencies: Object.keys(packageJson.devDependencies || {}),
           dependencyVersions: {
             ...(packageJson.dependencies || {}),
             ...(packageJson.devDependencies || {}),
+          },
+          entrypoints: {
+            main: packageJson.main || null,
+            module: packageJson.module || null,
+            types: packageJson.types || packageJson.typings || null,
+            bin: packageJson.bin || null,
           },
         }
       } catch (error) {
@@ -307,47 +374,64 @@ function detectBuildTools(files) {
 
 function detectTechStack(repoInfo, files, selectedFileContents, packageJson) {
   const stack = new Set()
-  const allContent = selectedFileContents.map((file) => file.content).join('\n')
+  const dependencyContent = dependencyManifestContent(selectedFileContents)
+  const configContent = runtimeConfigContent(selectedFileContents)
+  const pythonContent = contentForFiles(selectedFileContents, (path) => path.endsWith('.py'))
+  const javaContent = contentForFiles(selectedFileContents, (path) => path.endsWith('.java') || path.endsWith('.kt'))
+  const rubyContent = contentForFiles(selectedFileContents, (path) => path.endsWith('.rb'))
+  const phpContent = contentForFiles(selectedFileContents, (path) => path.endsWith('.php') || path.endsWith('/artisan'))
+  const dotnetContent = contentForFiles(selectedFileContents, (path) => /\.(cs|fs|vb)$/.test(path))
+  const pubspecContent = contentForFiles(selectedFileContents, (path) => /(^|\/)pubspec\.yaml$/.test(path))
   const primaryLanguage = getPrimaryLanguage(repoInfo, files)
   const nodePackages = new Set([
     ...(packageJson?.dependencies || []),
     ...(packageJson?.devDependencies || []),
   ])
+  const pythonPackages = parsePythonDependencies(selectedFileContents)
+  const hasPythonPackage = (name) => pythonPackages.has(normalizePackageName(name))
 
   if (primaryLanguage && primaryLanguage !== 'None') stack.add(primaryLanguage)
   if (hasFile(files, 'package.json')) stack.add('Node.js')
   if (hasPath(files, /\.tsx?$/) || nodePackages.has('typescript')) stack.add('TypeScript')
 
-  // 파일 경로와 선택된 핵심 파일 내용을 함께 사용한 프레임워크/인프라 기술 감지
+  // 기술 스택은 후보 문자열이 아니라 manifest와 실제 언어별 import/bootstrap 근거로만 감지
   if (
-    /spring-boot|org\.springframework\.boot/i.test(allContent) ||
-    hasDependencyText(allContent, 'spring-boot-starter') ||
-    hasPath(files, /Application\.java$/)
+    /spring-boot|org\.springframework\.boot/i.test(dependencyContent) ||
+    hasDependencyText(dependencyContent, 'spring-boot-starter') ||
+    /@SpringBootApplication|SpringApplication\.run/i.test(javaContent)
   ) {
     stack.add('Spring Boot')
   }
-  if (/jquery|\$\(/i.test(allContent)) stack.add('jQuery')
-  if (/from\s+fastapi\s+import|import\s+fastapi/i.test(allContent)) stack.add('FastAPI')
-  if (/from\s+django|django\./i.test(allContent)) stack.add('Django')
-  if (/from\s+flask\s+import|import\s+flask/i.test(allContent)) stack.add('Flask')
-  if (/thymeleaf/i.test(allContent) || hasPath(files, /src\/main\/resources\/templates\//)) {
+  if (nodePackages.has('jquery')) stack.add('jQuery')
+  if (hasPythonPackage('fastapi') || /from\s+fastapi\s+import|import\s+fastapi|FastAPI\s*\(/i.test(pythonContent)) {
+    stack.add('FastAPI')
+  }
+  if (hasPythonPackage('django') || /from\s+django|import\s+django|DJANGO_SETTINGS_MODULE/i.test(pythonContent)) {
+    stack.add('Django')
+  }
+  if (hasPythonPackage('flask') || /from\s+flask\s+import|import\s+flask|Flask\s*\(/i.test(pythonContent)) {
+    stack.add('Flask')
+  }
+  if (/thymeleaf/i.test(dependencyContent) || hasPath(files, /src\/main\/resources\/templates\//)) {
     stack.add('Thymeleaf')
   }
-  if (/h2database|com\.h2database|jdbc:h2/i.test(allContent)) stack.add('H2 Database')
-  if (/mysql/i.test(allContent) || hasPath(files, /mysql/i)) stack.add('MySQL')
-  if (/postgres/i.test(allContent) || hasPath(files, /postgres/i)) stack.add('PostgreSQL')
+  if (/h2database|com\.h2database|jdbc:h2/i.test(`${dependencyContent}\n${configContent}`)) stack.add('H2 Database')
+  if (/mysql|mariadb/i.test(`${dependencyContent}\n${configContent}`)) stack.add('MySQL')
+  if (/postgres|psycopg/i.test(`${dependencyContent}\n${configContent}`)) stack.add('PostgreSQL')
   if (hasFile(files, 'Dockerfile') || hasFile(files, 'docker-compose.yml')) stack.add('Docker')
   if (hasPath(files, /\.kt$/)) stack.add('Kotlin')
   if (hasPath(files, /\.swift$/)) stack.add('Swift')
   if (hasFile(files, 'Package.swift')) stack.add('Swift Package Manager')
   if (hasPath(files, /\.dart$/) || hasFile(files, 'pubspec.yaml')) stack.add('Dart')
-  if (/flutter:/i.test(allContent) || hasPath(files, /(^|\/)lib\/main\.dart$/)) stack.add('Flutter')
+  if (/flutter:/i.test(pubspecContent) || hasPath(files, /(^|\/)lib\/main\.dart$/)) stack.add('Flutter')
   if (hasPath(files, /\.rb$/) || hasFile(files, 'Gemfile')) stack.add('Ruby')
-  if (/rails|actionpack|activerecord/i.test(allContent) || hasFile(files, 'config.ru')) stack.add('Ruby on Rails')
+  if (/rails|actionpack|activerecord/i.test(dependencyContent) || /Rails\.application|ApplicationController/i.test(rubyContent) || hasFile(files, 'config.ru')) {
+    stack.add('Ruby on Rails')
+  }
   if (hasPath(files, /\.php$/) || hasFile(files, 'composer.json')) stack.add('PHP')
-  if (/laravel\/framework|Illuminate\\/i.test(allContent) || hasFile(files, 'artisan')) stack.add('Laravel')
+  if (/laravel\/framework/i.test(dependencyContent) || /Illuminate\\/i.test(phpContent) || hasFile(files, 'artisan')) stack.add('Laravel')
   if (hasPath(files, /\.(cs|fs|vb)$/) || hasPath(files, /\.(csproj|fsproj|vbproj|sln)$/)) stack.add('.NET')
-  if (/Microsoft\.AspNetCore|WebApplication\.CreateBuilder/i.test(allContent)) stack.add('ASP.NET Core')
+  if (/Microsoft\.AspNetCore/i.test(dependencyContent) || /WebApplication\.CreateBuilder/i.test(dotnetContent)) stack.add('ASP.NET Core')
   if (hasPath(files, /\.(cpp|cc|cxx|c|hpp|h)$/)) stack.add('C/C++')
   if (hasFile(files, 'CMakeLists.txt')) stack.add('CMake')
   if (hasPath(files, /\.scala$/) || hasFile(files, 'build.sbt')) stack.add('Scala')
@@ -361,12 +445,376 @@ function detectTechStack(repoInfo, files, selectedFileContents, packageJson) {
   })
 
   Object.entries(PYTHON_TECH_STACK_PACKAGES).forEach(([packageName, stackName]) => {
-    if (hasDependencyText(allContent, packageName)) {
+    if (hasPythonPackage(packageName)) {
       stack.add(stackName)
     }
   })
 
   return Array.from(stack)
+}
+
+function cleanMajorVersion(version) {
+  return String(version || '')
+    .replace(/^[~^><=\s]+/, '')
+    .split(/[.\s-]/)[0]
+}
+
+function withMajorVersion(name, dependencyVersions = {}, packageName = name.toLowerCase()) {
+  const version = cleanMajorVersion(dependencyVersions[packageName])
+  return version ? `${name} ${version}` : name
+}
+
+function createTechStackSection(id, label) {
+  return {
+    id,
+    label,
+    rows: [],
+  }
+}
+
+function addTechStackRow(section, category, technology, evidence = null) {
+  if (!section || !technology) {
+    return
+  }
+
+  const exists = section.rows.some((row) =>
+    row.category === category && row.technology === technology
+  )
+
+  if (!exists) {
+    section.rows.push({
+      category,
+      technology,
+      evidence,
+    })
+  }
+}
+
+function getPackageDependencySet(context) {
+  return new Set([
+    ...(context.dependencies || []),
+    ...(context.devDependencies || []),
+  ])
+}
+
+function hasDependencyInSet(dependencies, name) {
+  return dependencies.has(name)
+}
+
+function hasPathInContext(files, dir, pattern) {
+  return files.some((file) =>
+    isPathInDirectory(file.path, dir) && pattern.test(file.path)
+  )
+}
+
+function contentInContext(selectedFileContents, dir, pattern) {
+  return selectedFileContents
+    .filter((file) => isPathInDirectory(file.path, dir) && pattern.test(file.path))
+    .map((file) => file.content || '')
+    .join('\n')
+}
+
+function nodePackageLooksFrontend(dependencies, files, dir) {
+  return (
+    hasDependencyInSet(dependencies, 'react') ||
+    hasDependencyInSet(dependencies, 'vue') ||
+    hasDependencyInSet(dependencies, '@angular/core') ||
+    hasDependencyInSet(dependencies, 'svelte') ||
+    hasDependencyInSet(dependencies, 'next') ||
+    hasDependencyInSet(dependencies, 'nuxt') ||
+    hasDependencyInSet(dependencies, 'astro') ||
+    hasPathInContext(files, dir, /(^|\/)(vite|next|nuxt|astro)\.config\.[cm]?[jt]s$/)
+  )
+}
+
+function nodePackageLooksBackend(dependencies, files, selectedFileContents, dir) {
+  const serverSource = contentInContext(
+    selectedFileContents,
+    dir,
+    /(^|\/)(server|app|index)\.(js|ts|mjs|cjs)$/
+  )
+
+  return (
+    hasDependencyInSet(dependencies, 'express') ||
+    hasDependencyInSet(dependencies, 'fastify') ||
+    hasDependencyInSet(dependencies, '@nestjs/core') ||
+    hasDependencyInSet(dependencies, 'hono') ||
+    hasDependencyInSet(dependencies, 'koa') ||
+    /node:http|createServer\s*\(/.test(serverSource) ||
+    hasPathInContext(files, dir, /(^|\/)(server|controllers?|routes?)\//)
+  )
+}
+
+function nodePackageLooksCli(context, dependencies) {
+  return (
+    Boolean(context.entrypoints?.bin) ||
+    hasDependencyInSet(dependencies, 'commander') ||
+    hasDependencyInSet(dependencies, 'yargs')
+  )
+}
+
+function addNodeRows(section, context, dependencies, files, selectedFileContents) {
+  const versions = context.dependencyVersions || {}
+  const dir = context.dir
+
+  addTechStackRow(
+    section,
+    '언어',
+    hasPathInContext(files, dir, /\.tsx?$/) || hasDependencyInSet(dependencies, 'typescript')
+      ? 'TypeScript'
+      : 'JavaScript',
+    `${dir}/package.json`
+  )
+
+  if (section.id === 'backend' || section.id === 'cli') {
+    addTechStackRow(section, '런타임', 'Node.js', `${dir}/package.json`)
+  }
+
+  if (context.type === 'module') {
+    addTechStackRow(section, '모듈 시스템', 'ES Modules', `${dir}/package.json`)
+  }
+
+  if (hasDependencyInSet(dependencies, 'react')) {
+    addTechStackRow(section, '프레임워크', withMajorVersion('React', versions, 'react'), `${dir}/package.json`)
+  }
+  if (hasDependencyInSet(dependencies, 'vue')) {
+    addTechStackRow(section, '프레임워크', withMajorVersion('Vue', versions, 'vue'), `${dir}/package.json`)
+  }
+  if (hasDependencyInSet(dependencies, '@angular/core')) {
+    addTechStackRow(section, '프레임워크', withMajorVersion('Angular', versions, '@angular/core'), `${dir}/package.json`)
+  }
+  if (hasDependencyInSet(dependencies, 'svelte')) {
+    addTechStackRow(section, '프레임워크', withMajorVersion('Svelte', versions, 'svelte'), `${dir}/package.json`)
+  }
+  if (hasDependencyInSet(dependencies, 'next')) {
+    addTechStackRow(section, '프레임워크', withMajorVersion('Next.js', versions, 'next'), `${dir}/package.json`)
+  }
+  if (hasDependencyInSet(dependencies, 'vite')) {
+    addTechStackRow(section, '빌드 도구', withMajorVersion('Vite', versions, 'vite'), `${dir}/package.json`)
+  }
+  if (hasDependencyInSet(dependencies, 'tailwindcss')) {
+    addTechStackRow(section, '스타일링', withMajorVersion('Tailwind CSS', versions, 'tailwindcss'), `${dir}/package.json`)
+  } else if (hasDependencyInSet(dependencies, 'sass')) {
+    addTechStackRow(section, '스타일링', withMajorVersion('Sass', versions, 'sass'), `${dir}/package.json`)
+  } else if (hasPathInContext(files, dir, /\.(css|scss)$/)) {
+    addTechStackRow(section, '스타일링', hasPathInContext(files, dir, /\.scss$/) ? 'SCSS' : 'CSS')
+  }
+
+  if (hasDependencyInSet(dependencies, 'express')) {
+    addTechStackRow(section, '서버', withMajorVersion('Express', versions, 'express'), `${dir}/package.json`)
+  } else if (hasDependencyInSet(dependencies, 'fastify')) {
+    addTechStackRow(section, '서버', withMajorVersion('Fastify', versions, 'fastify'), `${dir}/package.json`)
+  } else if (hasDependencyInSet(dependencies, '@nestjs/core')) {
+    addTechStackRow(section, '서버', withMajorVersion('NestJS', versions, '@nestjs/core'), `${dir}/package.json`)
+  } else if (
+    section.id === 'backend' &&
+    /node:http|createServer\s*\(/.test(contentInContext(
+      selectedFileContents,
+      dir,
+      /(^|\/)(server|app|index)\.(js|ts|mjs|cjs)$/
+    ))
+  ) {
+    addTechStackRow(section, '서버', 'Node.js HTTP Server')
+  }
+
+  if (hasDependencyInSet(dependencies, 'commander')) {
+    addTechStackRow(section, '프레임워크', withMajorVersion('Commander', versions, 'commander'), `${dir}/package.json`)
+  }
+  if (hasDependencyInSet(dependencies, 'yargs')) {
+    addTechStackRow(section, '프레임워크', withMajorVersion('Yargs', versions, 'yargs'), `${dir}/package.json`)
+  }
+  if (context.entrypoints?.bin) {
+    addTechStackRow(section, '진입점', 'package.json bin', `${dir}/package.json`)
+  }
+}
+
+function buildNodeTechStackSections(files, selectedFileContents, packageContexts) {
+  return packageContexts
+    .map((context) => {
+      const dependencies = getPackageDependencySet(context)
+      const isFrontend = nodePackageLooksFrontend(dependencies, files, context.dir)
+      const isCli = nodePackageLooksCli(context, dependencies)
+      const isBackend = nodePackageLooksBackend(dependencies, files, selectedFileContents, context.dir)
+      let section = null
+
+      if (isFrontend) {
+        section = createTechStackSection('frontend', 'Frontend')
+      } else if (isBackend) {
+        section = createTechStackSection('backend', context.dir.startsWith('backend') ? 'Backend API' : 'Backend')
+      } else if (isCli) {
+        section = createTechStackSection('cli', 'CLI')
+      }
+
+      if (!section) {
+        return null
+      }
+
+      addNodeRows(section, context, dependencies, files, selectedFileContents)
+      return section.rows.length > 0 ? section : null
+    })
+    .filter(Boolean)
+}
+
+function pythonDependenciesForDir(selectedFileContents, dir) {
+  return parsePythonDependencies(
+    selectedFileContents.filter((file) => isPathInDirectory(file.path, dir))
+  )
+}
+
+function buildPythonTechStackSections(files, selectedFileContents) {
+  return getPythonDependencyContexts(files)
+    .map((context) => {
+      const dependencies = pythonDependenciesForDir(selectedFileContents, context.dir)
+      const appInfo = findPythonAppInfo(selectedFileContents, context.dir)
+      const hasDependency = (name) => dependencies.has(normalizePackageName(name))
+      const hasDataLibrary = ['numpy', 'pandas', 'scikit-learn', 'sklearn', 'tensorflow', 'torch', 'matplotlib']
+        .some(hasDependency)
+      const isFastApi = hasDependency('fastapi') || appInfo?.framework === 'FastAPI'
+      const isFlask = hasDependency('flask') || appInfo?.framework === 'Flask'
+      const isDjango = hasDependency('django') || appInfo?.framework === 'Django'
+
+      if (!isFastApi && !isFlask && !isDjango && !hasDataLibrary) {
+        return null
+      }
+
+      const section = createTechStackSection(
+        hasDataLibrary && !isFastApi && !isFlask && !isDjango ? 'data' : 'aiServer',
+        isFastApi && appInfo?.path && /(^|\/|_)ai/i.test(appInfo.path) ? 'AI Server' : 'Python Backend'
+      )
+
+      addTechStackRow(section, '언어', 'Python', context.dir === '.' ? 'requirements.txt' : `${context.dir}/requirements.txt`)
+      if (isFastApi) addTechStackRow(section, '프레임워크', 'FastAPI', context.dir === '.' ? 'requirements.txt' : `${context.dir}/requirements.txt`)
+      if (isFlask) addTechStackRow(section, '프레임워크', 'Flask', context.dir === '.' ? 'requirements.txt' : `${context.dir}/requirements.txt`)
+      if (isDjango) addTechStackRow(section, '프레임워크', 'Django', context.dir === '.' ? 'requirements.txt' : `${context.dir}/requirements.txt`)
+      if (hasDependency('uvicorn')) addTechStackRow(section, '서버', 'Uvicorn', context.dir === '.' ? 'requirements.txt' : `${context.dir}/requirements.txt`)
+      if (hasDependency('pydantic')) addTechStackRow(section, '라이브러리', 'Pydantic', context.dir === '.' ? 'requirements.txt' : `${context.dir}/requirements.txt`)
+      if (hasDependency('numpy')) addTechStackRow(section, '라이브러리', 'NumPy')
+      if (hasDependency('pandas')) addTechStackRow(section, '라이브러리', 'Pandas')
+      if (hasDependency('scikit-learn') || hasDependency('sklearn')) addTechStackRow(section, 'ML 라이브러리', 'scikit-learn')
+      if (hasDependency('tensorflow')) addTechStackRow(section, 'ML 라이브러리', 'TensorFlow')
+      if (hasDependency('torch')) addTechStackRow(section, 'ML 라이브러리', 'PyTorch')
+      if (hasDependency('matplotlib')) addTechStackRow(section, '시각화', 'Matplotlib')
+      if (
+        hasDataLibrary &&
+        hasPathInContext(files, context.dir, /(^|\/)notebooks?\/.*\.ipynb$/)
+      ) {
+        addTechStackRow(section, '노트북', 'Jupyter Notebook')
+      }
+
+      return section.rows.length > 0 ? section : null
+    })
+    .filter(Boolean)
+}
+
+function detectExternalApiNames(selectedFileContents) {
+  const externalApiPatterns = [
+    [/^https?:\/\/api\.github\.com\//i, 'GitHub API'],
+    [/^https?:\/\/api\.openai\.com\//i, 'OpenAI API'],
+    [/^https?:\/\/api\.anthropic\.com\//i, 'Anthropic API'],
+    [/^https?:\/\/generativelanguage\.googleapis\.com\//i, 'Google Gemini API'],
+    [/^https?:\/\/api-inference\.huggingface\.co\//i, 'Hugging Face Inference API'],
+    [/^https?:\/\/api\.stripe\.com\//i, 'Stripe API'],
+    [/^https?:\/\/api(-m)?\.paypal\.com\//i, 'PayPal API'],
+    [/^https?:\/\/api\.twilio\.com\//i, 'Twilio API'],
+    [/^https?:\/\/api\.sendgrid\.com\//i, 'SendGrid API'],
+    [/^https?:\/\/slack\.com\/api\//i, 'Slack API'],
+    [/^https?:\/\/(discord|discordapp)\.com\/api\//i, 'Discord API'],
+    [/^https?:\/\/api\.notion\.com\//i, 'Notion API'],
+    [/^https?:\/\/[A-Za-z0-9-]+\.supabase\.co\/(rest|auth|storage|functions)\//i, 'Supabase API'],
+    [/^https?:\/\/maps\.googleapis\.com\/maps\/api\//i, 'Google Maps API'],
+    [/^https?:\/\/(www\.)?googleapis\.com\/youtube\//i, 'YouTube Data API'],
+    [/^https?:\/\/youtube\.googleapis\.com\/youtube\//i, 'YouTube Data API'],
+    [/^https?:\/\/oauth2\.googleapis\.com\//i, 'Google OAuth API'],
+    [/^https?:\/\/www\.googleapis\.com\/calendar\//i, 'Google Calendar API'],
+    [/^https?:\/\/graph\.facebook\.com\//i, 'Meta Graph API'],
+    [/^https?:\/\/api\.x\.com\//i, 'X API'],
+    [/^https?:\/\/api\.twitter\.com\//i, 'X API'],
+    [/^https?:\/\/dapi\.kakao\.com\//i, 'Kakao API'],
+    [/^https?:\/\/kapi\.kakao\.com\//i, 'Kakao API'],
+    [/^https?:\/\/openapi\.naver\.com\//i, 'Naver Open API'],
+    [/^https?:\/\/api\.openweathermap\.org\//i, 'OpenWeather API'],
+    [/^https?:\/\/api\.airkorea\.or\.kr\//i, 'AirKorea API'],
+    [/^https?:\/\/apis\.data\.go\.kr\/B552584\b/i, 'AirKorea API'],
+    [/^https?:\/\/query[12]\.finance\.yahoo\.com\//i, 'Yahoo Finance API'],
+    [/^https?:\/\/production\.dataviz\.cnn\.io\//i, 'CNN Fear & Greed API'],
+    [/^https?:\/\/apis\.data\.go\.kr\//i, '공공데이터포털 API'],
+    [/^https?:\/\/api\.odcloud\.kr\//i, '공공데이터포털 API'],
+  ]
+  const sourceText = selectedFileContents.map((file) => file.content || '').join('\n')
+  const pythonPackages = parsePythonDependencies(selectedFileContents)
+
+  const apiNames = Array.from(sourceText.matchAll(/https?:\/\/[^\s"'`)<]+/g))
+    .map((match) => match[0].replace(/[),.;]+$/g, ''))
+    .filter((url) => !/^https?:\/\/(localhost|127\.0\.0\.1|0\.0\.0\.0)(:|\/|$)/i.test(url))
+    .map((url) => {
+      const matchedPattern = externalApiPatterns.find(([pattern]) => pattern.test(url))
+
+      return matchedPattern?.[1] || null
+    })
+    .filter(Boolean)
+    .filter((name, index, names) => names.indexOf(name) === index)
+
+  if (
+    pythonPackages.has('huggingface-hub') &&
+    /from\s+huggingface_hub\s+import\s+InferenceClient|InferenceClient\s*\(/.test(sourceText) &&
+    !apiNames.includes('Hugging Face Inference API')
+  ) {
+    apiNames.push('Hugging Face Inference API')
+  }
+
+  return apiNames
+}
+
+function buildInfrastructureTechStackSection(files) {
+  const section = createTechStackSection('infrastructure', 'Infrastructure')
+
+  if (hasFile(files, 'Dockerfile')) addTechStackRow(section, '컨테이너', 'Docker', 'Dockerfile')
+  if (hasFile(files, 'docker-compose.yml') || hasFile(files, 'docker-compose.yaml')) {
+    addTechStackRow(section, '컨테이너 오케스트레이션', 'Docker Compose', 'docker-compose.yml')
+  }
+  if (hasPath(files, /(^|\/)\.github\/workflows\//)) {
+    addTechStackRow(section, 'CI/CD', 'GitHub Actions', '.github/workflows')
+  }
+
+  return section.rows.length > 0 ? section : null
+}
+
+function mergeTechStackSections(sections) {
+  const merged = new Map()
+  const order = ['frontend', 'backend', 'aiServer', 'data', 'cli', 'externalApis', 'infrastructure', 'application']
+
+  sections.filter(Boolean).forEach((section) => {
+    if (!merged.has(section.id)) {
+      merged.set(section.id, createTechStackSection(section.id, section.label))
+    }
+
+    const target = merged.get(section.id)
+    section.rows.forEach((row) =>
+      addTechStackRow(target, row.category, row.technology, row.evidence)
+    )
+  })
+
+  return Array.from(merged.values())
+    .filter((section) => section.rows.length > 0)
+    .sort((left, right) => order.indexOf(left.id) - order.indexOf(right.id))
+}
+
+function buildTechStackSections(files, selectedFileContents, packageContexts) {
+  const externalApis = detectExternalApiNames(selectedFileContents)
+  const externalApiSection = externalApis.length > 0
+    ? createTechStackSection('externalApis', 'External APIs')
+    : null
+
+  externalApis.forEach((apiName) =>
+    addTechStackRow(externalApiSection, '외부 API', apiName)
+  )
+
+  return mergeTechStackSections([
+    ...buildNodeTechStackSections(files, selectedFileContents, packageContexts),
+    ...buildPythonTechStackSections(files, selectedFileContents),
+    externalApiSection,
+    buildInfrastructureTechStackSection(files),
+  ])
 }
 
 function detectProjectType(files, techStack) {
@@ -1049,6 +1497,7 @@ export function organizeReadmeData(repoInfo, files, selectedFiles, selectedFileC
   const repositoryAnalysis = buildRepositoryAnalysis(repoInfo, selectedFileContents)
   const buildTools = detectBuildTools(files)
   const techStack = detectTechStack(repoInfo, files, selectedFileContents, packageJson)
+  const techStackSections = buildTechStackSections(files, selectedFileContents, packageContexts)
   const commandGroups = detectCommandGroups(files, packageContexts, selectedFileContents)
   const commands = detectCommands(files, packageJson, techStack, commandGroups)
   const projectType = detectProjectType(files, techStack)
@@ -1119,6 +1568,7 @@ export function organizeReadmeData(repoInfo, files, selectedFiles, selectedFileC
       primaryLanguage,
       buildTools,
       techStack,
+      techStackSections,
       commands,
       commandGroups,
       detectedFeatures,

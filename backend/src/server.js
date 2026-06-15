@@ -23,7 +23,15 @@ const PORT = process.env.PORT || 3000
 const AI_ANALYSIS_URL = process.env.AI_ANALYSIS_URL || 'http://localhost:8000/analyze'
 const AI_ANALYSIS_TIMEOUT_MS = parsePositiveInteger(
   process.env.AI_ANALYSIS_TIMEOUT_MS,
-  10000
+  60000
+)
+const AI_ANALYSIS_MAX_FILES = parsePositiveInteger(
+  process.env.AI_ANALYSIS_MAX_FILES,
+  20
+)
+const AI_ANALYSIS_MAX_FILE_CHARS = parsePositiveInteger(
+  process.env.AI_ANALYSIS_MAX_FILE_CHARS,
+  7000
 )
 
 // 프론트엔드 개발 서버에서 API 호출할 수 있도록 CORS 헤더 구성
@@ -344,9 +352,10 @@ async function analyzeRepositoryWithAi(repoInfo, selectedFileContents) {
       body: JSON.stringify({
         name: repoInfo.name,
         description: repoInfo.description,
-        selectedFileContents: selectedFileContents.map((file) => ({
+        selectedFileContents: selectedFileContents.slice(0, AI_ANALYSIS_MAX_FILES).map((file) => ({
           path: file.path,
-          content: file.content,
+          content: String(file.content || '').slice(0, AI_ANALYSIS_MAX_FILE_CHARS),
+          truncated: String(file.content || '').length > AI_ANALYSIS_MAX_FILE_CHARS,
         })),
       }),
     })

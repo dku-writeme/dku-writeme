@@ -71,6 +71,62 @@ const sectionBlock = (sections, key, title, content) => {
 
 const joinBlocks = (blocks) => blocks.filter(Boolean).join('\n\n')
 
+const FEATURE_TITLE_TRANSLATIONS = new Map([
+  ['weather data', '날씨 정보 조회'],
+  ['weather information', '날씨 정보 조회'],
+  ['air quality index', '대기질 조회'],
+  ['air quality data', '대기질 조회'],
+  ['market data', '시장 데이터 조회'],
+  ['stock market data', '주식 시장 데이터 조회'],
+  ['fear and greed index', '투자 심리 지수 조회'],
+  ['fear & greed index', '투자 심리 지수 조회'],
+  ['caching', '응답 캐싱'],
+  ['cache', '응답 캐싱'],
+  ['mock data', '목업 데이터 제공'],
+  ['fallback data', '대체 데이터 제공'],
+  ['repository analysis', '저장소 분석'],
+  ['readme generation', 'README 생성'],
+  ['markdown editing', 'Markdown 편집'],
+  ['markdown preview', 'Markdown 미리보기'],
+  ['file download', '파일 다운로드'],
+  ['copy to clipboard', '클립보드 복사'],
+])
+
+const localizeFeatureTitle = (title) => {
+  const normalizedTitle = String(title || '')
+    .replace(/\s+/g, ' ')
+    .trim()
+  const translatedTitle = FEATURE_TITLE_TRANSLATIONS.get(normalizedTitle.toLowerCase())
+
+  return translatedTitle || normalizedTitle
+}
+
+const formatStructuredTechStack = (sections) => {
+  if (!Array.isArray(sections) || sections.length === 0) {
+    return ''
+  }
+
+  const tableHeaders = ['분류', '기술']
+  const blocks = sections
+    .map((section) => {
+      const rows = (section.rows || [])
+        .map((row) => [
+          row.category,
+          row.technology || row.name,
+        ])
+        .filter(([category, technology]) => category && technology)
+
+      if (rows.length === 0) {
+        return ''
+      }
+
+      return `### ${section.label || section.id}\n\n${formatMarkdownTable(tableHeaders, rows)}`
+    })
+    .filter(Boolean)
+
+  return blocks.join('\n\n')
+}
+
 const formatFeatures = (repoInfo) => {
   const features = repoInfo.features || repoInfo.readmeData?.analysis?.detectedFeatures
   const fallbackDescription = '저장소 구조와 핵심 파일 분석을 통해 확인된 기능입니다.'
@@ -94,12 +150,12 @@ const formatFeatures = (repoInfo) => {
     if (separatorIndex === -1) {
       return {
         description: fallbackDescription,
-        title: normalizedFeature,
+        title: localizeFeatureTitle(normalizedFeature),
       }
     }
 
     return {
-      title: normalizedFeature.slice(0, separatorIndex).trim(),
+      title: localizeFeatureTitle(normalizedFeature.slice(0, separatorIndex).trim()),
       description: normalizedFeature.slice(separatorIndex + 1).trim() || fallbackDescription,
     }
   }
@@ -124,6 +180,20 @@ const formatFeatures = (repoInfo) => {
 
 const formatTechStack = (repoInfo) => {
   const analysis = repoInfo.readmeData?.analysis || {}
+  const structuredTechStack = formatStructuredTechStack(analysis.techStackSections)
+
+  if (structuredTechStack) {
+    return structuredTechStack
+  }
+
+  if (Array.isArray(analysis.techStackSections)) {
+    const fallbackLanguage = analysis.primaryLanguage || repoInfo.language
+
+    return fallbackLanguage
+      ? formatMarkdownTable(['분류', '기술'], [['언어', fallbackLanguage]])
+      : `- ${TEXT.none}`
+  }
+
   const structurePaths = repoInfo.readmeData?.fileSummary?.structurePaths || []
   // dependency만으로 잡히지 않는 외부 API, CLI/ML 프레임워크 단서 보조 탐색
   const sourceText = (repoInfo.readmeData?.sourceFiles || [])
@@ -183,16 +253,56 @@ const formatTechStack = (repoInfo) => {
     return version ? `${name} ${version}` : name
   }
   const nodeVersion = cleanVersion(analysis.engines?.node)
-  const externalApis = [
-    ['OpenWeather', /openweather/i],
-    ['AirKorea', /airkorea|air korea/i],
-    ['Yahoo Finance', /yahoo finance|query\d?\.finance\.yahoo/i],
-    ['CNN Fear & Greed', /fear\s*&\s*greed|cnn/i],
-    ['GitHub API', /api\.github\.com|github api/i],
-    ['OpenAI API', /openai/i],
+  const externalApiPatterns = [
+    [/^https?:\/\/api\.github\.com\//i, 'GitHub API'],
+    [/^https?:\/\/api\.openai\.com\//i, 'OpenAI API'],
+    [/^https?:\/\/api\.anthropic\.com\//i, 'Anthropic API'],
+    [/^https?:\/\/generativelanguage\.googleapis\.com\//i, 'Google Gemini API'],
+    [/^https?:\/\/api-inference\.huggingface\.co\//i, 'Hugging Face Inference API'],
+    [/^https?:\/\/api\.stripe\.com\//i, 'Stripe API'],
+    [/^https?:\/\/api(-m)?\.paypal\.com\//i, 'PayPal API'],
+    [/^https?:\/\/api\.twilio\.com\//i, 'Twilio API'],
+    [/^https?:\/\/api\.sendgrid\.com\//i, 'SendGrid API'],
+    [/^https?:\/\/slack\.com\/api\//i, 'Slack API'],
+    [/^https?:\/\/(discord|discordapp)\.com\/api\//i, 'Discord API'],
+    [/^https?:\/\/api\.notion\.com\//i, 'Notion API'],
+    [/^https?:\/\/[A-Za-z0-9-]+\.supabase\.co\/(rest|auth|storage|functions)\//i, 'Supabase API'],
+    [/^https?:\/\/maps\.googleapis\.com\/maps\/api\//i, 'Google Maps API'],
+    [/^https?:\/\/(www\.)?googleapis\.com\/youtube\//i, 'YouTube Data API'],
+    [/^https?:\/\/youtube\.googleapis\.com\/youtube\//i, 'YouTube Data API'],
+    [/^https?:\/\/oauth2\.googleapis\.com\//i, 'Google OAuth API'],
+    [/^https?:\/\/www\.googleapis\.com\/calendar\//i, 'Google Calendar API'],
+    [/^https?:\/\/graph\.facebook\.com\//i, 'Meta Graph API'],
+    [/^https?:\/\/api\.x\.com\//i, 'X API'],
+    [/^https?:\/\/api\.twitter\.com\//i, 'X API'],
+    [/^https?:\/\/dapi\.kakao\.com\//i, 'Kakao API'],
+    [/^https?:\/\/kapi\.kakao\.com\//i, 'Kakao API'],
+    [/^https?:\/\/openapi\.naver\.com\//i, 'Naver Open API'],
+    [/^https?:\/\/api\.openweathermap\.org\//i, 'OpenWeather API'],
+    [/^https?:\/\/api\.airkorea\.or\.kr\//i, 'AirKorea API'],
+    [/^https?:\/\/apis\.data\.go\.kr\/B552584\b/i, 'AirKorea API'],
+    [/^https?:\/\/query[12]\.finance\.yahoo\.com\//i, 'Yahoo Finance API'],
+    [/^https?:\/\/production\.dataviz\.cnn\.io\//i, 'CNN Fear & Greed API'],
+    [/^https?:\/\/apis\.data\.go\.kr\//i, '공공데이터포털 API'],
+    [/^https?:\/\/api\.odcloud\.kr\//i, '공공데이터포털 API'],
   ]
-    .filter(([, pattern]) => hasSource(pattern))
-    .map(([name]) => name)
+  const externalApis = Array.from(sourceText.matchAll(/https?:\/\/[^\s"'`)<]+/g))
+    .map((match) => match[0].replace(/[),.;]+$/g, ''))
+    .filter((url) => !/^https?:\/\/(localhost|127\.0\.0\.1|0\.0\.0\.0)(:|\/|$)/i.test(url))
+    .map((url) => {
+      const matchedPattern = externalApiPatterns.find(([pattern]) => pattern.test(url))
+
+      return matchedPattern?.[1] || null
+    })
+    .filter(Boolean)
+    .filter((name, index, names) => names.indexOf(name) === index)
+
+  if (
+    /huggingface-hub|from\s+huggingface_hub\s+import\s+InferenceClient|InferenceClient\s*\(/.test(sourceText) &&
+    !externalApis.includes('Hugging Face Inference API')
+  ) {
+    externalApis.push('Hugging Face Inference API')
+  }
 
   const frontendRows = []
   const backendRows = []
@@ -233,8 +343,7 @@ const formatTechStack = (repoInfo) => {
   const usesCli =
     Boolean(analysis.packageEntrypoints?.bin) ||
     hasDependency('commander') ||
-    hasDependency('yargs') ||
-    hasSource(/commander|yargs|argparse|click\.command|typer\.Typer|spf13\/cobra|clap::/i)
+    hasDependency('yargs')
   const hasDataScienceLibrary =
     techStack.has('NumPy') ||
     techStack.has('Pandas') ||
@@ -242,7 +351,7 @@ const formatTechStack = (repoInfo) => {
     techStack.has('TensorFlow') ||
     techStack.has('PyTorch') ||
     techStack.has('Matplotlib')
-  const hasNotebook = hasPath(/\.(ipynb)$/) || hasPath(/(^|\/)notebooks?\//)
+  const hasNotebook = hasDataScienceLibrary && hasPath(/(^|\/)notebooks?\/.*\.ipynb$/)
   const hasDataScienceDirectory = hasPath(/(^|\/)(data|datasets?|models?)\//)
   // 일반 백엔드 models 폴더가 Data / ML로 오탐되지 않도록 Python 근거와 함께 판정
   const isPythonDataProject = (
@@ -333,10 +442,6 @@ const formatTechStack = (repoInfo) => {
     }
     if (hasDependency('commander')) addRow(cliRows, 'Framework', withVersion('Commander', 'commander'))
     if (hasDependency('yargs')) addRow(cliRows, 'Framework', withVersion('Yargs', 'yargs'))
-    if (hasSource(/click\.command/i)) addRow(cliRows, 'Framework', 'Click')
-    if (hasSource(/typer\.Typer/i)) addRow(cliRows, 'Framework', 'Typer')
-    if (hasSource(/spf13\/cobra/i)) addRow(cliRows, 'Framework', 'Cobra')
-    if (hasSource(/clap::/i)) addRow(cliRows, 'Framework', 'clap')
     if (analysis.packageEntrypoints?.bin) addRow(cliRows, 'Entrypoint', 'package.json bin')
   }
 
@@ -1181,6 +1286,48 @@ const PROJECT_TYPE_LABELS = {
   'Swift project': 'Swift 프로젝트',
 }
 
+const OVERVIEW_TECH_ALLOWLIST = new Set([
+  'Angular',
+  'Anthropic API',
+  'Django',
+  'Express',
+  'FastAPI',
+  'Flask',
+  'GitHub API',
+  'Google Gemini API',
+  'Hugging Face Inference API',
+  'Laravel',
+  'Next.js',
+  'Node.js',
+  'OpenAI API',
+  'React',
+  'Ruby on Rails',
+  'Spring Boot',
+  'Svelte',
+  'Vue',
+  'Vite',
+])
+
+const normalizeOverviewTechName = (technology = '') =>
+  String(technology)
+    .replace(/\s+\d+(\.\d+)?\+?$/u, '')
+    .trim()
+
+const getOverviewTechStack = (analysis) => {
+  const structuredTech = (analysis.techStackSections || [])
+    .flatMap((section) => section.rows || [])
+    .map((row) => normalizeOverviewTechName(row.technology || row.name))
+    .filter((technology) => OVERVIEW_TECH_ALLOWLIST.has(technology))
+
+  const fallbackTech = (analysis.techStack || [])
+    .map(normalizeOverviewTechName)
+    .filter((technology) => OVERVIEW_TECH_ALLOWLIST.has(technology))
+
+  return [...structuredTech, ...fallbackTech]
+    .filter((technology, index, technologies) => technologies.indexOf(technology) === index)
+    .slice(0, 6)
+}
+
 const formatRuleBasedOverview = (repoInfo) => {
   const readmeData = repoInfo.readmeData || {}
   const analysis = readmeData.analysis || {}
@@ -1189,9 +1336,7 @@ const formatRuleBasedOverview = (repoInfo) => {
   const primaryLanguage = normalizeTextValue(
     analysis.primaryLanguage || repository.language || repoInfo.language
   )
-  const techStack = (analysis.techStack || [])
-    .filter((tech) => tech && tech !== primaryLanguage && tech !== 'Node.js')
-    .slice(0, 4)
+  const techStack = getOverviewTechStack(analysis)
 
   // GitHub description이 없을 때만 분석된 언어/프로젝트 유형으로 개요를 보완
   const lines = []
