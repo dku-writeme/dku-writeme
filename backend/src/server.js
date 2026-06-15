@@ -291,6 +291,7 @@ function createAiAnalysisReport(aiAnalysis, readmeData, selectedFileContents) {
     status: aiAnalysis.status,
     usedAi: aiAnalysis.usedAi,
     fallbackUsed: aiAnalysis.fallbackUsed,
+    parserFallbackUsed: aiAnalysis.parserFallbackUsed,
     message: aiAnalysis.message,
     summary: aiAnalysis.summary || null,
     durationMs: aiAnalysis.durationMs,
@@ -343,6 +344,7 @@ async function analyzeRepositoryWithAi(repoInfo, selectedFileContents) {
   const fallbackMessage = 'AI 분석을 사용할 수 없어 Rule-based 분석 결과로 README를 구성했습니다.'
   let status = 'fallback'
   let message = fallbackMessage
+  let parserFallbackUsed = false
 
   try {
     const aiResponse = await fetch(AI_ANALYSIS_URL, {
@@ -364,9 +366,10 @@ async function analyzeRepositoryWithAi(repoInfo, selectedFileContents) {
       const aiResult = await aiResponse.json()
       // description은 GitHub 원본 값을 유지하고, AI 요약은 README 상단 인용문에만 사용
       summary = normalizeAiText(aiResult.summary) || summary
-      features = normalizeAiFeatures(aiResult.features)
-      status = 'success'
-      message = 'AI 분석이 완료되었습니다.'
+      features = aiResult.fallbackUsed ? null : normalizeAiFeatures(aiResult.features)
+      parserFallbackUsed = Boolean(aiResult.parserFallbackUsed)
+      status = aiResult.fallbackUsed ? 'fallback' : 'success'
+      message = aiResult.message || (aiResult.fallbackUsed ? fallbackMessage : 'AI 분석이 완료되었습니다.')
     } else {
       console.error('AI 서버 응답 오류:', aiResponse.status)
       status = 'failed'
@@ -390,6 +393,7 @@ async function analyzeRepositoryWithAi(repoInfo, selectedFileContents) {
     status,
     usedAi: status === 'success',
     fallbackUsed: status !== 'success',
+    parserFallbackUsed,
     message,
     durationMs: Date.now() - startedAt,
   }
