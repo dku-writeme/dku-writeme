@@ -114,8 +114,8 @@ function normalizeAiText(text) {
   return normalizedText && normalizedText !== 'None' ? normalizedText : null
 }
 
-function includesAny(text, keywords) {
-  return keywords.some((keyword) => text.includes(keyword))
+function matchesAny(text, patterns) {
+  return patterns.some((pattern) => pattern.test(text))
 }
 
 function buildSummaryEvidenceText(repoInfo, selectedFileContents) {
@@ -130,6 +130,48 @@ function buildSummaryEvidenceText(repoInfo, selectedFileContents) {
     .toLowerCase()
 }
 
+function hasTelegramEvidence(evidenceText) {
+  return matchesAny(evidenceText, [
+    /api\.telegram\.org\/bot/,
+    /\btelegram[_-]?(bot|token|chat[_-]?id)\b/,
+    /\btelegraf\b/,
+    /\bnode-telegram-bot-api\b/,
+    /\.sendmessage\s*\(/,
+  ])
+}
+
+function hasAlertEvidence(evidenceText) {
+  return matchesAny(evidenceText, [
+    /api\.telegram\.org\/bot/,
+    /\btelegram[_-]?(bot|token|chat[_-]?id)\b/,
+    /\b(sendgrid|twilio|nodemailer|web-push|firebase-admin)\b/,
+    /\b(sendmail|send_mail|sendemail|send_email|sendmessage|send_message|notifyuser|notify_user)\s*\(/,
+    /\bsgmail\.send\s*\(/,
+    /\bcreateTransport\s*\(/,
+    /\bmessages\.create\s*\(/,
+    /\bnew\s+notification\s*\(/,
+  ])
+}
+
+function hasTargetPriceEvidence(evidenceText) {
+  return matchesAny(evidenceText, [
+    /\b(target[_-]?price|price[_-]?target|targetprice)\b/,
+    /\b(price|quote|stock|ticker|aapl|finance|market)\b[\s\S]{0,120}\b(threshold|limit|target)\b/,
+    /\b(threshold|limit|target)\b[\s\S]{0,120}\b(price|quote|stock|ticker|aapl|finance|market)\b/,
+  ])
+}
+
+function hasAutomationEvidence(evidenceText) {
+  return matchesAny(evidenceText, [
+    /\b(cron|node-cron|apscheduler|schedule|scheduler)\b/,
+    /\bsetinterval\s*\(/,
+    /\bsettimeout\s*\(/,
+    /\bworker\b/,
+    /\b(job|task|queue)\s*\(/,
+    /\.github\/workflows\//,
+  ])
+}
+
 function isUnsupportedAiSummary(summary, repoInfo, selectedFileContents) {
   const normalizedSummary = String(summary || '').toLowerCase()
 
@@ -138,58 +180,33 @@ function isUnsupportedAiSummary(summary, repoInfo, selectedFileContents) {
   }
 
   const evidenceText = buildSummaryEvidenceText(repoInfo, selectedFileContents)
-  const financeKeywords = ['주식', '시장', '가격', 'stock', 'market', 'price', 'finance']
-  const alertClaimKeywords = [
-    '알림',
-    '목표 가격',
-    '목표가',
-    'notification',
-    'notify',
-    'alert',
-    'target price',
-    'price target',
-  ]
-  const alertEvidenceKeywords = [
-    '알림',
-    '목표 가격',
-    '목표가',
-    'notification',
-    'notify',
-    'alert',
-    'sendgrid',
-    'twilio',
-    'email',
-    'sms',
-    'push',
-    'target_price',
-    'targetprice',
-    'price target',
-    'threshold',
-  ]
-  const automationClaimKeywords = ['자동화된', '자동으로', 'automated', 'automatically']
-  const automationEvidenceKeywords = [
-    'cron',
-    'schedule',
-    'scheduler',
-    'interval',
-    'setinterval',
-    'worker',
-    'job',
-    '자동화',
-  ]
+  const hasFinanceClaim = matchesAny(normalizedSummary, [
+    /주식|시장|가격|목표가|목표 가격|stock|market|price|finance|aapl|apple/,
+  ])
+  const hasAlertClaim = matchesAny(normalizedSummary, [
+    /알림|전송|notification|notify|alert|telegram|slack|discord|email|sms/,
+  ])
+  const hasTargetPriceClaim = matchesAny(normalizedSummary, [
+    /목표가|목표 가격|target price|price target/,
+  ])
+  const hasAutomationClaim = matchesAny(normalizedSummary, [
+    /자동화|자동으로|모니터링|실시간으로 모니터링|automated|automatically|monitoring/,
+  ])
+  const hasTelegramClaim = matchesAny(normalizedSummary, [/telegram/])
 
-  if (
-    includesAny(normalizedSummary, financeKeywords)
-    && includesAny(normalizedSummary, alertClaimKeywords)
-    && !includesAny(evidenceText, alertEvidenceKeywords)
-  ) {
+  if (hasTelegramClaim && !hasTelegramEvidence(evidenceText)) {
     return true
   }
 
-  if (
-    includesAny(normalizedSummary, automationClaimKeywords)
-    && !includesAny(evidenceText, automationEvidenceKeywords)
-  ) {
+  if (hasFinanceClaim && hasAlertClaim && !hasAlertEvidence(evidenceText)) {
+    return true
+  }
+
+  if (hasFinanceClaim && hasTargetPriceClaim && !hasTargetPriceEvidence(evidenceText)) {
+    return true
+  }
+
+  if (hasAutomationClaim && !hasAutomationEvidence(evidenceText)) {
     return true
   }
 
