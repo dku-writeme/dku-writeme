@@ -114,6 +114,88 @@ function normalizeAiText(text) {
   return normalizedText && normalizedText !== 'None' ? normalizedText : null
 }
 
+function includesAny(text, keywords) {
+  return keywords.some((keyword) => text.includes(keyword))
+}
+
+function buildSummaryEvidenceText(repoInfo, selectedFileContents) {
+  return [
+    repoInfo.name,
+    repoInfo.description,
+    ...(repoInfo.topics || []),
+    ...selectedFileContents.flatMap((file) => [file.path, file.content]),
+  ]
+    .filter(Boolean)
+    .join('\n')
+    .toLowerCase()
+}
+
+function isUnsupportedAiSummary(summary, repoInfo, selectedFileContents) {
+  const normalizedSummary = String(summary || '').toLowerCase()
+
+  if (!normalizedSummary) {
+    return false
+  }
+
+  const evidenceText = buildSummaryEvidenceText(repoInfo, selectedFileContents)
+  const financeKeywords = ['주식', '시장', '가격', 'stock', 'market', 'price', 'finance']
+  const alertClaimKeywords = [
+    '알림',
+    '목표 가격',
+    '목표가',
+    'notification',
+    'notify',
+    'alert',
+    'target price',
+    'price target',
+  ]
+  const alertEvidenceKeywords = [
+    '알림',
+    '목표 가격',
+    '목표가',
+    'notification',
+    'notify',
+    'alert',
+    'sendgrid',
+    'twilio',
+    'email',
+    'sms',
+    'push',
+    'target_price',
+    'targetprice',
+    'price target',
+    'threshold',
+  ]
+  const automationClaimKeywords = ['자동화된', '자동으로', 'automated', 'automatically']
+  const automationEvidenceKeywords = [
+    'cron',
+    'schedule',
+    'scheduler',
+    'interval',
+    'setinterval',
+    'worker',
+    'job',
+    '자동화',
+  ]
+
+  if (
+    includesAny(normalizedSummary, financeKeywords)
+    && includesAny(normalizedSummary, alertClaimKeywords)
+    && !includesAny(evidenceText, alertEvidenceKeywords)
+  ) {
+    return true
+  }
+
+  if (
+    includesAny(normalizedSummary, automationClaimKeywords)
+    && !includesAny(evidenceText, automationEvidenceKeywords)
+  ) {
+    return true
+  }
+
+  return false
+}
+
 function splitFeatureItems(features) {
   const featureItems = Array.isArray(features) ? features : [features]
 
@@ -365,7 +447,12 @@ async function analyzeRepositoryWithAi(repoInfo, selectedFileContents) {
     if (aiResponse.ok) {
       const aiResult = await aiResponse.json()
       // description은 GitHub 원본 값을 유지하고, AI 요약은 README 상단 인용문에만 사용
-      summary = normalizeAiText(aiResult.summary) || summary
+      const aiSummary = normalizeAiText(aiResult.summary)
+      if (aiSummary && !isUnsupportedAiSummary(aiSummary, repoInfo, selectedFileContents)) {
+        summary = aiSummary
+      } else if (aiSummary) {
+        console.warn('근거가 부족한 AI 요약을 제외했습니다:', aiSummary)
+      }
       features = aiResult.fallbackUsed ? null : normalizeAiFeatures(aiResult.features)
       parserFallbackUsed = Boolean(aiResult.parserFallbackUsed)
       status = aiResult.fallbackUsed ? 'fallback' : 'success'
